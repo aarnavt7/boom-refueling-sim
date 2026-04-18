@@ -1,0 +1,12 @@
+.DS_Store
+.tmp
+node_modules
+.next
+out
+dist
+coverage
+*.log
+.env.local
+.env
+convex/.generated
+convex/_generated
