@@ -6,6 +6,7 @@ out
 dist
 coverage
 *.log
+*.tsbuildinfo
 .env.local
 .env
 convex/.generated

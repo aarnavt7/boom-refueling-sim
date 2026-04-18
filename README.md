@@ -2,6 +2,8 @@
 
 Browser-based **3D aerial refueling boom** simulator: fly the boom, watch the synthetic camera feed, and replay runs. Built with **Next.js**, **React Three Fiber**, and **Three.js**.
 
+**Repository:** [github.com/aarnavt7/boom-refueling-sim](https://github.com/aarnavt7/boom-refueling-sim)
+
 ![Boom — refueling boom sim](public/boom-logo.svg)
 
 ## Features
