@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { LANDING_IMAGES } from "@/lib/landing/landingImageAssets";
+
 export function ProblemSectionEratos() {
   return (
     <section id="problem" className="landing-section mt-20 border-t border-landing-line pt-16 sm:mt-28 sm:pt-20">
@@ -14,7 +16,7 @@ export function ProblemSectionEratos() {
 
       <div className="relative mt-8 overflow-hidden rounded-3xl border border-white/[0.07] bg-black">
         <Image
-          src="/landing/console-hud.svg"
+          src={LANDING_IMAGES.problemRehearsal}
           alt="Console preview"
           width={1600}
           height={900}

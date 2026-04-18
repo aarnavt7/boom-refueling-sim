@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useCallback, useState } from "react";
 
+import { LANDING_IMAGES } from "@/lib/landing/landingImageAssets";
+
 const VIDEO_SRC = "/landing/demo.mp4";
 
 export function LandingMediaStrip() {
@@ -16,7 +18,7 @@ export function LandingMediaStrip() {
     <div className="mt-12 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
       <div className="relative overflow-hidden border border-landing-line bg-black">
         <Image
-          src="/landing/console-hud.svg"
+          src={LANDING_IMAGES.mediaTacticalFrame}
           alt="Diagram of a tactical console frame with readouts"
           width={1200}
           height={675}
@@ -28,7 +30,7 @@ export function LandingMediaStrip() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <div className="relative overflow-hidden border border-landing-line bg-black">
           <Image
-            src="/landing/sensor-pip.svg"
+            src={LANDING_IMAGES.mediaSensorPip}
             alt="Synthetic sensor viewport schematic"
             width={800}
             height={500}

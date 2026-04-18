@@ -12,6 +12,8 @@ import {
   LANDING_HERO_CAMERA_FOV,
   LANDING_HERO_CAMERA_POSITION,
 } from "@/components/scene/LandingFlybyController";
+import { CaptureCameraRig } from "@/components/scene/CaptureCameraRig";
+import { LandingSceneReadyNotifier } from "@/components/scene/LandingSceneReadyNotifier";
 import {
   OuterEnvironment,
   type OuterEnvironmentVariant,
@@ -54,10 +56,13 @@ import { updateTracker } from "@/lib/sim/tracker";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
+export type SimCanvasVariant = "sim" | "landing" | "capture";
+
 type WorldProps = {
   sensorCameraRef: React.RefObject<THREE.PerspectiveCamera | null>;
   sensorTarget: THREE.WebGLRenderTarget;
   environmentVariant?: OuterEnvironmentVariant;
+  simVariant?: SimCanvasVariant;
 };
 
 function MainCameraLayerSync() {
@@ -74,6 +79,7 @@ function SimulationWorld({
   sensorCameraRef,
   sensorTarget,
   environmentVariant = "sim",
+  simVariant = "sim",
 }: WorldProps) {
   const clear =
     environmentVariant === "landing" ? LANDING_CANVAS_CLEAR : CANVAS_CLEAR;
@@ -85,6 +91,10 @@ function SimulationWorld({
   useFrame((_, delta) => {
     const uiState = useUiStore.getState();
     const simState = useSimStore.getState();
+
+    if (uiState.simFrozen) {
+      return;
+    }
 
     if (uiState.replayMode) {
       if (!uiState.replayPlaying || simState.replaySamples.length === 0) {
@@ -247,6 +257,8 @@ function SimulationWorld({
       <DebugHelpers />
       {environmentVariant === "landing" ? (
         <LandingFlybyController />
+      ) : simVariant === "capture" ? (
+        <CaptureCameraRig />
       ) : (
         <OrbitControls
           makeDefault
@@ -260,17 +272,29 @@ function SimulationWorld({
   );
 }
 
-export type SimCanvasVariant = "sim" | "landing";
-
-export function SimCanvas({ variant = "sim" }: { variant?: SimCanvasVariant }) {
+export function SimCanvas({
+  variant = "sim",
+  onLandingReady,
+  landingForceRender,
+}: {
+  variant?: SimCanvasVariant;
+  /** Landing only: called once assets + first paints are ready (boot overlay dismisses). */
+  onLandingReady?: () => void;
+  /** Landing only: keep the render loop running (e.g. while boot overlay hides the hero). */
+  landingForceRender?: boolean;
+}) {
   const sensorCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sensorTarget = useMemo(() => createSensorRenderTarget(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [heroVisible, setHeroVisible] = useState(true);
 
-  const clearColor = variant === "landing" ? LANDING_CANVAS_CLEAR : CANVAS_CLEAR;
+  const clearColor =
+    variant === "landing" ? LANDING_CANVAS_CLEAR : CANVAS_CLEAR;
   const toneExposure =
     variant === "landing" ? LANDING_TONE_MAPPING_EXPOSURE : 0.72;
+
+  const outerEnv: OuterEnvironmentVariant =
+    variant === "landing" ? "landing" : variant === "capture" ? "capture" : "sim";
 
   useEffect(() => {
     return () => {
@@ -296,19 +320,27 @@ export function SimCanvas({ variant = "sim" }: { variant?: SimCanvasVariant }) {
     <div
       ref={containerRef}
       className={
-        variant === "landing"
-          ? "pointer-events-none absolute inset-0 z-0 h-full min-h-0 w-full overflow-hidden"
+        variant === "landing" || variant === "capture"
+          ? variant === "capture"
+            ? "absolute inset-0 z-0 h-full min-h-0 w-full overflow-hidden"
+            : "pointer-events-none absolute inset-0 z-0 h-full min-h-0 w-full overflow-hidden"
           : "fixed inset-0 z-0 box-border min-h-0 w-screen max-w-[100vw] overflow-hidden"
       }
       style={{
         background: clearColor,
-        height: variant === "landing" ? "100%" : "100dvh",
-        minHeight: variant === "landing" ? "100%" : "100dvh",
+        height: variant === "landing" || variant === "capture" ? "100%" : "100dvh",
+        minHeight: variant === "landing" || variant === "capture" ? "100%" : "100dvh",
       }}
     >
       <Canvas
         className="block h-full w-full touch-none"
-        frameloop={variant === "landing" ? (heroVisible ? "always" : "never") : "always"}
+        frameloop={
+          variant === "landing"
+            ? landingForceRender || heroVisible
+              ? "always"
+              : "never"
+            : "always"
+        }
         shadows={{ type: THREE.PCFSoftShadowMap }}
         camera={{
           position:
@@ -328,7 +360,7 @@ export function SimCanvas({ variant = "sim" }: { variant?: SimCanvasVariant }) {
           alpha: false,
           powerPreference: "high-performance",
         }}
-        dpr={variant === "landing" ? [1, 1.5] : [1, 2]}
+        dpr={variant === "landing" ? [1, 1.5] : variant === "capture" ? [1, 2] : [1, 2]}
         onCreated={({ gl, scene, camera }) => {
           camera.layers.enable(SIM_CONTENT_LAYER);
           scene.background = new THREE.Color(clearColor);
@@ -341,8 +373,12 @@ export function SimCanvas({ variant = "sim" }: { variant?: SimCanvasVariant }) {
         <SimulationWorld
           sensorCameraRef={sensorCameraRef}
           sensorTarget={sensorTarget}
-          environmentVariant={variant}
+          environmentVariant={outerEnv}
+          simVariant={variant}
         />
+        {variant === "landing" && onLandingReady ? (
+          <LandingSceneReadyNotifier onReady={onLandingReady} />
+        ) : null}
       </Canvas>
     </div>
   );

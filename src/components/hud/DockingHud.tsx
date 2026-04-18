@@ -20,7 +20,12 @@ function controllerTone(state: string): "ok" | "warn" | "danger" | "neutral" {
   return "neutral";
 }
 
-export function DockingHud() {
+type DockingHudProps = {
+  /** Use inside a `relative` container (e.g. `/imgs` capture) instead of full-viewport fixed. */
+  embedded?: boolean;
+};
+
+export function DockingHud({ embedded = false }: DockingHudProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const live = useSimStore((state) => state.live);
   const replaySamples = useSimStore((state) => state.replaySamples);
@@ -55,8 +60,12 @@ export function DockingHud() {
     context.putImageData(image, 0, 0);
   }, [sensorFrame]);
 
+  const rootLayout = embedded
+    ? "pointer-events-none absolute inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]"
+    : "pointer-events-none fixed inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]";
+
   return (
-    <div className="pointer-events-none fixed inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]">
+    <div className={rootLayout}>
       <header className="pointer-events-auto flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <Image src="/boom-logo.svg" alt="" width={28} height={28} className="shrink-0" />

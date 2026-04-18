@@ -18,7 +18,7 @@ import {
   LANDING_SKY_BACKGROUND_INTENSITY,
 } from "@/components/scene/sunConfig";
 
-export type OuterEnvironmentVariant = "sim" | "landing";
+export type OuterEnvironmentVariant = "sim" | "landing" | "capture";
 
 function AerialFog({ variant }: { variant: OuterEnvironmentVariant }) {
   const fogColor = variant === "landing" ? LANDING_FOG_COLOR : FOG_COLOR;

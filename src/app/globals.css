@@ -168,3 +168,66 @@ input[type="range"].tactical-range::-moz-range-thumb {
   background: var(--hud-accent);
   border: 1px solid color-mix(in srgb, var(--hud-accent) 70%, #000);
 }
+
+/* Landing hero: GLB preload + WebGL chunk — branded loader + canvas reveal */
+@keyframes landing-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes landing-loader-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes landing-loader-bar {
+  0% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(230%);
+  }
+}
+
+@keyframes landing-canvas-reveal {
+  from {
+    opacity: 0;
+    filter: brightness(0.72);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.landing-hero-loader__ring-ccw {
+  animation: landing-orbit 14s linear infinite;
+}
+
+.landing-hero-loader__ring-cw {
+  animation: landing-orbit 10s linear infinite reverse;
+}
+
+.landing-hero-loader__sweep {
+  background: conic-gradient(
+    from 210deg,
+    transparent 0deg,
+    transparent 260deg,
+    rgba(227, 107, 23, 0.55) 302deg,
+    transparent 338deg
+  );
+  animation: landing-loader-sweep 7.5s linear infinite;
+  opacity: 0.88;
+  mask: radial-gradient(circle, transparent 54%, #000 55%);
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 55%);
+}
+
+.landing-hero-loader__bar {
+  animation: landing-loader-bar 1.45s ease-in-out infinite;
+}
+
+.animate-landing-canvas-reveal {
+  animation: landing-canvas-reveal 0.95s ease-out forwards;
+}
