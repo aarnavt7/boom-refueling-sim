@@ -43,11 +43,11 @@ Open [http://localhost:3000](http://localhost:3000) for the landing page. Open [
 
 ## Environment
 
-Copy `.env.example` to `.env.local` if present and set:
+Optional for production metadata:
 
-- `NEXT_PUBLIC_SITE_URL` — Canonical site URL for metadata (defaults inferred on Vercel).
+- `NEXT_PUBLIC_SITE_URL` — Canonical site URL (Vercel sets `VERCEL_URL` automatically).
 
-For Convex persistence, follow the Convex dashboard and add the generated URL as documented in your Convex project.
+For Convex persistence, follow the Convex dashboard and wire env vars from your deployment provider.
 
 ## Deploy
 
