@@ -5,7 +5,7 @@ import type * as THREE from "three";
 
 import { BoomRigGeometry } from "@/components/scene/BoomRigGeometry";
 import { SensorCamera } from "@/components/scene/SensorCamera";
-import { BOOM_BASE_POSITION } from "@/lib/sim/constants";
+import { getSensorRigById } from "@/lib/sim/perception";
 import { getDisplayedState } from "@/lib/sim/replay";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
@@ -26,14 +26,41 @@ export function BoomRig({ sensorCameraRef }: BoomRigProps) {
   );
 
   const { boom } = displayed;
+  const activeSensor = getSensorRigById(displayed.estimate.sensorId);
+  const terminalSensorLocal = {
+    x: activeSensor.localOffset.x,
+    y: activeSensor.localOffset.y,
+    z: Math.max(boom.extend + activeSensor.localOffset.z, 0.8),
+  };
 
   return (
-    <group position={[BOOM_BASE_POSITION.x, BOOM_BASE_POSITION.y, BOOM_BASE_POSITION.z]}>
-      <BoomRigGeometry yaw={boom.yaw} pitch={boom.pitch} extend={boom.extend}>
-        <group position={[0, 0.06, Math.max(boom.extend - 0.65, 0.8)]}>
-          <SensorCamera ref={sensorCameraRef} />
+    <>
+      {activeSensor.role === "acquire" ? (
+        <group
+          position={[activeSensor.localOffset.x, activeSensor.localOffset.y, activeSensor.localOffset.z]}
+          rotation={[
+            activeSensor.localRotation.x,
+            activeSensor.localRotation.y,
+            activeSensor.localRotation.z,
+          ]}
+        >
+          <SensorCamera ref={sensorCameraRef} fov={activeSensor.fovDeg} />
         </group>
+      ) : null}
+      <BoomRigGeometry yaw={boom.yaw} pitch={boom.pitch} extend={boom.extend}>
+        {activeSensor.role === "terminal" ? (
+          <group
+            position={[terminalSensorLocal.x, terminalSensorLocal.y, terminalSensorLocal.z]}
+            rotation={[
+              activeSensor.localRotation.x,
+              activeSensor.localRotation.y,
+              activeSensor.localRotation.z,
+            ]}
+          >
+            <SensorCamera ref={sensorCameraRef} fov={activeSensor.fovDeg} />
+          </group>
+        ) : null}
       </BoomRigGeometry>
-    </group>
+    </>
   );
 }

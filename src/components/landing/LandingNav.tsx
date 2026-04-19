@@ -8,7 +8,6 @@ import { useLandingHeroUnveil } from "@/components/landing/useLandingHeroUnveil"
 const links = [
   { href: "#problem", label: "Problem" },
   { href: "#pipeline", label: "Pipeline" },
-  { href: "#proof", label: "Proof" },
   { href: "#technology", label: "Tech" },
 ];
 

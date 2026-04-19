@@ -25,7 +25,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-ibm-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["var(--font-ibm-mono)", "ui-monospace", "monospace"],
+        mono: ["var(--font-ibm-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       boxShadow: {
         hud: "inset 0 1px 0 rgba(255,255,255,0.04)",

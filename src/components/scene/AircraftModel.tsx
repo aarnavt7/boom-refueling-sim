@@ -12,8 +12,7 @@ import {
 import * as THREE from "three";
 
 import {
-  RECEIVER_VISUAL_CONFIG,
-  TANKER_VISUAL_CONFIG,
+  AIRCRAFT_ASSET_PATHS,
   type AircraftVisualConfig,
 } from "@/lib/sim/aircraftVisualConfig";
 
@@ -131,37 +130,95 @@ function createCanopyMaterial(
 function createOpaqueMaterial(
   source: MaterialLike,
   role: Exclude<MaterialRole, "canopy">,
+  label: string,
   config: AircraftVisualConfig,
   anisotropy: number,
 ) {
   const material = source.clone() as MaterialLike;
   const paint = config.material;
+  const hasColorMap = Boolean(material.map);
 
-  if (role === "base" && material.color) {
-    material.color.set(paint.baseColor);
-    material.metalness = paint.baseMetalness;
-    material.roughness = paint.baseRoughness;
-  } else if (role === "accent" && material.color) {
-    material.color.set(paint.accentColor);
-    material.metalness = paint.accentMetalness;
-    material.roughness = paint.accentRoughness;
-  } else if (role === "dark" && material.color) {
-    material.color.set(paint.darkColor);
-    material.metalness = 0.32;
-    material.roughness = 0.5;
-  } else if (role === "interior" && material.color) {
-    material.color.set("#252b31");
-    material.metalness = 0.12;
-    material.roughness = 0.72;
-    if (material.emissive) {
-      material.emissive.set("#0f151a");
-      material.emissiveIntensity = 0.08;
+  if (paint.treatment === "legacyTinted") {
+    if (role === "base" && material.color) {
+      material.color.set(paint.baseColor);
+      material.metalness = paint.baseMetalness;
+      material.roughness = paint.baseRoughness;
+    } else if (role === "accent" && material.color) {
+      material.color.set(paint.accentColor);
+      material.metalness = paint.accentMetalness;
+      material.roughness = paint.accentRoughness;
+    } else if (role === "dark" && material.color) {
+      material.color.set(paint.darkColor);
+      material.metalness = paint.darkMetalness;
+      material.roughness = paint.darkRoughness;
+    } else if (role === "interior" && material.color) {
+      material.color.set("#252b31");
+      material.metalness = 0.12;
+      material.roughness = 0.72;
+      if (material.emissive) {
+        material.emissive.set("#0f151a");
+        material.emissiveIntensity = 0.08;
+      }
+    }
+  } else {
+    if (material.color) {
+      if (hasColorMap) {
+        material.color.set("#ffffff");
+      } else if (role === "accent") {
+        material.color.set(paint.accentColor);
+      } else if (role === "dark") {
+        material.color.set(paint.darkColor);
+      } else {
+        material.color.set(paint.baseColor);
+      }
+    }
+
+    if (role === "base") {
+      material.metalness = Math.max(material.metalness ?? 0, paint.baseMetalness);
+      material.roughness = Math.min(Math.max(material.roughness ?? paint.baseRoughness, 0.22), 0.72);
+    } else if (role === "accent") {
+      material.metalness = Math.max(material.metalness ?? 0, paint.accentMetalness);
+      material.roughness = Math.min(Math.max(material.roughness ?? paint.accentRoughness, 0.18), 0.62);
+    } else if (role === "dark") {
+      material.metalness = Math.max(material.metalness ?? 0, paint.darkMetalness);
+      material.roughness = Math.min(Math.max(material.roughness ?? paint.darkRoughness, 0.16), 0.56);
+    } else if (role === "interior") {
+      material.metalness = Math.max(material.metalness ?? 0, 0.08);
+      material.roughness = Math.min(Math.max(material.roughness ?? 0.76, 0.52), 0.9);
+      if (material.color && !hasColorMap) {
+        material.color.set("#2a3137");
+      }
+      if (material.emissive) {
+        material.emissive.set("#111922");
+        material.emissiveIntensity = 0.1;
+      }
+    }
+
+    if (matchesName(label, config.heatNameTokens)) {
+      if (material.color) {
+        if (hasColorMap) {
+          material.color.lerp(new THREE.Color("#f0b18e"), 0.18);
+        } else {
+          material.color.set("#7d685f");
+        }
+      }
+      material.metalness = Math.max(material.metalness ?? 0, 0.56);
+      material.roughness = Math.min(Math.max(material.roughness ?? 0.26, 0.18), 0.42);
+      if (material.emissive) {
+        material.emissive.set("#2d1109");
+        material.emissiveIntensity = 0.12;
+      }
+    } else if (matchesName(label, config.lightNameTokens) && material.emissive) {
+      const isGreen = label.includes("green");
+      const isRed = label.includes("red");
+      material.emissive.set(isGreen ? "#56ff9b" : isRed ? "#ff5858" : "#ffd27f");
+      material.emissiveIntensity = material.emissiveMap ? 1.2 : 0.24;
     }
   }
 
   material.envMapIntensity = paint.envMapIntensity;
-  material.clearcoat = role === "accent" ? 0.12 : 0.05;
-  material.clearcoatRoughness = 0.42;
+  material.clearcoat = Math.max(material.clearcoat ?? 0, role === "accent" ? paint.clearcoat + 0.04 : paint.clearcoat);
+  material.clearcoatRoughness = Math.min(material.clearcoatRoughness ?? 1, paint.clearcoatRoughness);
   material.transparent = false;
   material.opacity = 1;
   material.depthWrite = true;
@@ -207,7 +264,7 @@ function buildPreparedScene(
       const nextMaterial =
         role === "canopy"
           ? createCanopyMaterial(typedMaterial, config, anisotropy)
-          : createOpaqueMaterial(typedMaterial, role, config, anisotropy);
+          : createOpaqueMaterial(typedMaterial, role, label, config, anisotropy);
 
       materialCache.set(material, nextMaterial);
       return nextMaterial;
@@ -324,5 +381,6 @@ export function AircraftModel({ config, fallback }: AircraftModelProps) {
   );
 }
 
-useGLTF.preload(TANKER_VISUAL_CONFIG.assetPath);
-useGLTF.preload(RECEIVER_VISUAL_CONFIG.assetPath);
+for (const assetPath of AIRCRAFT_ASSET_PATHS) {
+  useGLTF.preload(assetPath);
+}

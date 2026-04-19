@@ -8,12 +8,14 @@ import {
   EMPTY_METRICS,
   EMPTY_SAFETY,
   EMPTY_TRACKER,
+  EMPTY_AUTOPILOT_COMMAND,
   INITIAL_BOOM_STATE,
-  RECEIVER_RECEPTACLE_LOCAL,
 } from "@/lib/sim/constants";
-import { worldFromLocalOffset } from "@/lib/sim/math";
+import { getReceiverReceptacleWorld } from "@/lib/sim/aircraftAttachments";
+import { sampleReceiverPose } from "@/lib/sim/motion";
 import { getScenarioById } from "@/lib/sim/scenarios";
 import type {
+  AutonomyEvaluationBundle,
   LiveSimState,
   ReplaySample,
   ScenarioPreset,
@@ -26,6 +28,7 @@ type SimStore = {
   scenario: ScenarioPreset;
   live: LiveSimState;
   replaySamples: ReplaySample[];
+  autonomyEvaluation: AutonomyEvaluationBundle | null;
   sensorFrame: SensorFrame | null;
   lastRecordedAt: number;
   persistStatus: PersistStatus;
@@ -33,7 +36,9 @@ type SimStore = {
   setScenarioById: (scenarioId: string) => void;
   resetScenario: (scenarioId?: string) => void;
   setLive: (live: LiveSimState) => void;
+  setReplaySamples: (samples: ReplaySample[]) => void;
   pushReplaySample: (sample: ReplaySample) => void;
+  setAutonomyEvaluation: (bundle: AutonomyEvaluationBundle | null) => void;
   setLastRecordedAt: (time: number) => void;
   setSensorFrame: (frame: SensorFrame) => void;
   setPersistStatus: (status: PersistStatus, message?: string | null) => void;
@@ -41,12 +46,8 @@ type SimStore = {
 
 export function createInitialLiveState(scenarioId = "steady-approach"): LiveSimState {
   const scenario = getScenarioById(scenarioId);
-  const receiverPose = scenario.receiverBasePose;
-  const targetPosition = worldFromLocalOffset(
-    receiverPose.position,
-    receiverPose.rotation,
-    RECEIVER_RECEPTACLE_LOCAL,
-  );
+  const receiverPose = sampleReceiverPose(0, scenario);
+  const targetPosition = getReceiverReceptacleWorld(receiverPose);
 
   return {
     simTime: 0,
@@ -57,8 +58,10 @@ export function createInitialLiveState(scenarioId = "steady-approach"): LiveSimS
       rotation: receiverPose.rotation,
     },
     boom: INITIAL_BOOM_STATE,
+    autopilotCommand: EMPTY_AUTOPILOT_COMMAND,
     command: EMPTY_COMMAND,
     controllerState: "SEARCH",
+    sensorObservations: [EMPTY_ESTIMATE],
     estimate: EMPTY_ESTIMATE,
     tracker: EMPTY_TRACKER,
     safety: EMPTY_SAFETY,
@@ -71,6 +74,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   scenario: getScenarioById("steady-approach"),
   live: createInitialLiveState(),
   replaySamples: [],
+  autonomyEvaluation: null,
   sensorFrame: null,
   lastRecordedAt: 0,
   persistStatus: "idle",
@@ -81,6 +85,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       scenario,
       live: createInitialLiveState(scenario.id),
       replaySamples: [],
+      autonomyEvaluation: null,
       sensorFrame: null,
       lastRecordedAt: 0,
       persistStatus: "idle",
@@ -94,6 +99,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       scenario,
       live: createInitialLiveState(activeId),
       replaySamples: [],
+      autonomyEvaluation: null,
       sensorFrame: null,
       lastRecordedAt: 0,
       persistStatus: "idle",
@@ -101,10 +107,12 @@ export const useSimStore = create<SimStore>((set, get) => ({
     });
   },
   setLive: (live) => set({ live }),
+  setReplaySamples: (replaySamples) => set({ replaySamples }),
   pushReplaySample: (sample) =>
     set((state) => ({
       replaySamples: [...state.replaySamples.slice(-399), sample],
     })),
+  setAutonomyEvaluation: (autonomyEvaluation) => set({ autonomyEvaluation }),
   setLastRecordedAt: (time) => set({ lastRecordedAt: time }),
   setSensorFrame: (frame) => set({ sensorFrame: frame }),
   setPersistStatus: (status, message = null) =>

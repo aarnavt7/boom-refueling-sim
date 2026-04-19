@@ -1,15 +1,14 @@
-import { BOOM_BASE_POSITION, EMPTY_COMMAND } from "@/lib/sim/constants";
+import { vec3 } from "@/lib/sim/math";
+import { getBoomBasePose } from "@/lib/sim/kinematics";
 import {
   clamp,
   distanceVec3,
-  lerp,
-  subVec3,
-  wrapAngle,
+  localOffsetFromWorld,
 } from "@/lib/sim/math";
 import type {
-  BoomCommand,
   BoomJointState,
   ControllerState,
+  DesiredTipMotion,
   PerceptionEstimate,
   SafetyStatus,
   ScenarioPreset,
@@ -37,123 +36,177 @@ export function updateController({
   estimate,
   safety,
   simTime,
-}: ControllerInput) {
-  if (safety.abort) {
+}: ControllerInput): { state: ControllerState; desiredTipMotion: DesiredTipMotion } {
+  if (safety.breakaway) {
     return {
-      state: "ABORT" as const,
-      command: abortCommand(boom),
+      state: "BREAKAWAY" as const,
+      desiredTipMotion: breakawayMotion(),
     };
   }
 
-  if (state === "DOCKED") {
+  if (safety.abort) {
     return {
-      state: "DOCKED" as const,
-      command: EMPTY_COMMAND,
+      state: "ABORT" as const,
+      desiredTipMotion: retractMotion("retract", 1.2),
+    };
+  }
+
+  if (state === "MATED") {
+    return {
+      state: "MATED" as const,
+      desiredTipMotion: { deltaBody: vec3(), mode: "hold" },
     };
   }
 
   if (!trackedTarget.position) {
     return {
       state: "SEARCH" as const,
-      command: searchCommand(simTime, boom),
+      desiredTipMotion: searchMotion(simTime, scenario, boom),
     };
   }
 
   const target = trackedTarget.position;
-  const relBase = subVec3(target, BOOM_BASE_POSITION);
-  const relTip = subVec3(target, boomTip);
-  const desiredYaw = Math.atan2(relBase.x, Math.max(relBase.z, 0.01));
-  const desiredPitch = Math.atan2(-relBase.y, Math.max(Math.hypot(relBase.x, relBase.z), 0.01));
-  const yawError = wrapAngle(desiredYaw - boom.yaw);
-  const pitchError = wrapAngle(desiredPitch - boom.pitch);
+  const basePose = getBoomBasePose();
+  const relTip = localOffsetFromWorld(boomTip, basePose.rotation, target);
   const lateralError = Math.hypot(relTip.x, relTip.y);
   const tipDistance = distanceVec3(target, boomTip);
+  const stagingPoint = {
+    x: target.x,
+    y: target.y,
+    z: target.z - 1.15,
+  };
+  const relStaging = localOffsetFromWorld(boomTip, basePose.rotation, stagingPoint);
 
   let nextState: ControllerState = state;
 
-  if (nextState === "SEARCH" && estimate.confidence > 0.28) {
+  if (safety.hold) {
+    nextState = "HOLD";
+  } else if (nextState === "HOLD" && trackedTarget.confidence > 0.34 && !safety.hold) {
+    nextState = relTip.z > 0.9 ? "TRACK" : "ALIGN";
+  } else if (nextState === "SEARCH" && estimate.confidence > 0.24) {
     nextState = "ACQUIRE";
-  } else if (nextState === "ACQUIRE" && estimate.confidence > 0.48) {
+  } else if (nextState === "ACQUIRE" && trackedTarget.confidence > 0.42) {
+    nextState = "TRACK";
+  } else if (
+    nextState === "TRACK" &&
+    lateralError < scenario.controller.alignTolerance * 1.4 &&
+    relStaging.z > -0.25
+  ) {
     nextState = "ALIGN";
   } else if (
     nextState === "ALIGN" &&
-    lateralError < scenario.controller.alignTolerance &&
-    Math.abs(yawError) < 0.08 &&
-    Math.abs(pitchError) < 0.08
+    lateralError < scenario.controller.insertTolerance * 1.15 &&
+    relTip.z > 0.02
   ) {
     nextState = "INSERT";
-  } else if (nextState === "INSERT" && tipDistance < scenario.controller.dockTolerance) {
-    nextState = "DOCKED";
-  } else if (nextState !== "SEARCH" && trackedTarget.confidence < 0.06) {
+  } else if (
+    nextState === "INSERT" &&
+    lateralError > scenario.controller.insertTolerance * 1.6
+  ) {
+    nextState = "ALIGN";
+  } else if (nextState === "INSERT" && tipDistance < scenario.controller.mateTolerance) {
+    nextState = "MATED";
+  } else if (
+    nextState !== "SEARCH" &&
+    nextState !== "HOLD" &&
+    trackedTarget.confidence < 0.12
+  ) {
     nextState = "SEARCH";
   }
 
-  let command: BoomCommand = EMPTY_COMMAND;
+  let desiredTipMotion: DesiredTipMotion;
 
   switch (nextState) {
     case "SEARCH":
-      command = searchCommand(simTime, boom);
+      desiredTipMotion = searchMotion(simTime, scenario, boom);
       break;
     case "ACQUIRE":
-      command = trackingCommand(yawError, pitchError, -0.5 * (boom.extend - scenario.controller.standbyExtend));
+      desiredTipMotion = trackPointMotion(relStaging, scenario, 0.72, "track");
       break;
-    case "ALIGN": {
-      const desiredExtend = clamp(relBase.z - 2.2, 5.5, scenario.controller.standbyExtend + 1.4);
-      command = trackingCommand(
-        yawError,
-        pitchError,
-        clamp((desiredExtend - boom.extend) * 0.9, -0.8, 0.8),
-      );
+    case "TRACK":
+      desiredTipMotion = trackPointMotion(relStaging, scenario, 0.78, "track");
       break;
-    }
+    case "ALIGN":
+      desiredTipMotion = trackPointMotion(relStaging, scenario, 0.86, "track");
+      break;
     case "INSERT": {
       const aligned = lateralError < scenario.controller.insertTolerance;
-      const extendRate = aligned ? clamp(relTip.z * 0.8 + 0.25, 0.1, 1.4) : -0.3;
-      command = trackingCommand(yawError, pitchError, extendRate);
+      desiredTipMotion = aligned
+        ? trackPointMotion(relTip, scenario, scenario.controller.closureGain, "track")
+        : retractMotion("hold", 0.16);
       break;
     }
-    case "DOCKED":
-      command = EMPTY_COMMAND;
+    case "MATED":
+      desiredTipMotion = { deltaBody: vec3(), mode: "hold" };
+      break;
+    case "HOLD":
+      desiredTipMotion = retractMotion("hold", 0.28);
       break;
     case "ABORT":
-      command = abortCommand(boom);
+      desiredTipMotion = retractMotion("retract", 1.2);
       break;
-  }
-
-  if (safety.hold && nextState !== "DOCKED" && nextState !== "ABORT") {
-    command = {
-      ...command,
-      extendRate: Math.min(0, command.extendRate),
-    };
+    case "BREAKAWAY":
+      desiredTipMotion = breakawayMotion();
+      break;
   }
 
   return {
     state: nextState,
-    command,
+    desiredTipMotion,
   };
 }
 
-function searchCommand(simTime: number, boom: BoomJointState): BoomCommand {
-  const centerBias = lerp(0, -boom.yaw, 0.15);
+function searchMotion(
+  simTime: number,
+  scenario: ScenarioPreset,
+  boom: BoomJointState,
+): DesiredTipMotion {
+  const standByError = scenario.controller.standbyExtend - boom.extend;
+
   return {
-    yawRate: Math.sin(simTime * 0.8) * 0.28 + centerBias,
-    pitchRate: Math.cos(simTime * 0.55) * 0.18 - boom.pitch * 0.12,
-    extendRate: clamp((7.1 - boom.extend) * 0.45, -0.6, 0.6),
+    deltaBody: {
+      x: Math.sin(simTime * 0.72) * scenario.controller.searchAmplitude.x,
+      y: Math.cos(simTime * 0.49) * scenario.controller.searchAmplitude.y,
+      z: clamp(standByError * 0.08, -scenario.controller.maxBodyStep, scenario.controller.maxBodyStep),
+    },
+    mode: "track",
   };
 }
 
-function trackingCommand(yawError: number, pitchError: number, extendRate: number): BoomCommand {
+function trackPointMotion(
+  localDelta: Vec3,
+  scenario: ScenarioPreset,
+  gain: number,
+  mode: DesiredTipMotion["mode"],
+): DesiredTipMotion {
   return {
-    yawRate: clamp(yawError * 2.2, -0.55, 0.55),
-    pitchRate: clamp(pitchError * 2.0, -0.42, 0.42),
-    extendRate,
+    deltaBody: {
+      x: clamp(localDelta.x * gain, -scenario.controller.maxBodyStep, scenario.controller.maxBodyStep),
+      y: clamp(localDelta.y * gain, -scenario.controller.maxBodyStep, scenario.controller.maxBodyStep),
+      z: clamp(localDelta.z * gain, -scenario.controller.maxBodyStep, scenario.controller.maxBodyStep),
+    },
+    mode,
   };
 }
 
-function abortCommand(boom: BoomJointState): BoomCommand {
+function retractMotion(mode: DesiredTipMotion["mode"], rate: number): DesiredTipMotion {
   return {
-    yawRate: clamp(-boom.yaw * 1.3, -0.5, 0.5),
-    pitchRate: clamp(-boom.pitch * 1.3, -0.45, 0.45),
-    extendRate: -1.2,
+    deltaBody: {
+      x: 0,
+      y: 0,
+      z: -Math.abs(rate) * 0.08,
+    },
+    mode,
+  };
+}
+
+function breakawayMotion(): DesiredTipMotion {
+  return {
+    deltaBody: {
+      x: 0,
+      y: -0.05,
+      z: -0.18,
+    },
+    mode: "breakaway",
   };
 }

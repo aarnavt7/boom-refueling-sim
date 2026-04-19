@@ -7,20 +7,20 @@ const pipeline = [
   },
   {
     step: "02",
-    title: "Camera track",
-    body: "Synthetic EO/IR + geometry estimates (no ML API).",
+    title: "Passive track",
+    body: "Visible + thermal acquisition and terminal sensors fused into one geometry-first receptacle track.",
     icon: "eye",
   },
   {
     step: "03",
     title: "Control + safety",
-    body: "Staged controller with limits and aborts.",
+    body: "Staged controller, `moveECEF(...)` autopilot commands, and hold / abort / breakaway logic.",
     icon: "shield",
   },
   {
     step: "04",
     title: "Replay",
-    body: "Scrub samples; save run if Convex is on.",
+    body: "Scrub samples; keep local run summaries and replay archives.",
     icon: "timeline",
   },
 ] as const;

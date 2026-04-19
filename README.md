@@ -1,23 +1,21 @@
-![Boom — refueling boom sim](public/boom-logo.svg)
-
 # Boom
 
-We created a browser based 3D aerial refueling boom simulator.
+Browser-based **3D aerial refueling boom** simulator: evaluate a passive visible/thermal sensor suite, drive an ECEF-commanded autonomous boom, and replay runs. Built with **Next.js**, **React Three Fiber**, and **Three.js**.
 
-The boom flys, you can see synthetic camera feeds, and replay runs.
+**Repository:** [github.com/aarnavt7/boom-refueling-sim](https://github.com/aarnavt7/boom-refueling-sim)
 
-Build w/ Nextj, React Three Fiber, Three.js
--based **3D aerial refueling boom** simulator: fly the boom, watch the synthetic camera feed, and replay runs. Built with **Next.js**, **React Three Fiber**, and **Three.js**.
+![Boom — refueling boom sim](public/boom-logo.svg)
 
 
 ## Features
 
 - **Full 3D scene** — Tanker, receiver, articulated boom, and lighting matched between the landing page and `/sim`.
 - **Landing hero** — Cinematic scripted fly-by (no orbit controls): camera sweeps past the formation on load and extends as you scroll.
-- **Synthetic camera** — Offscreen render + geometry-based tracking (no ML API required).
-- **Safety & metrics** — Limits, staged controller states, and live metrics in the HUD.
+- **Passive multispectral sensing** — Tail acquisition + boom terminal cameras with visible/thermal handoff and fused geometry tracking.
+- **Mission profiles** — Day/night, land/water, and EMCON operating envelopes wired into the same sim loop.
+- **Autopilot + safety** — `moveECEF(...)` command generation, boom plant limits, hold/abort/breakaway logic, and live metrics in the HUD.
 - **Replay** — Record and scrub runs from the sim store.
-- **Optional cloud saves** — Convex integration for persisting completed runs (configure when deploying).
+- **Local-first saves** — Preferences and run summaries in `localStorage`, replay archives in IndexedDB.
 
 ## Requirements
 
@@ -43,15 +41,12 @@ Open [http://localhost:3000](http://localhost:3000) for the landing page. Open [
 | `bun run lint` | ESLint |
 | `bun run typecheck` | TypeScript (`tsc --noEmit`) |
 | `bun run test` | Tests |
-| `bun run convex:dev` / `convex:deploy` | Convex (optional) |
 
 ## Environment
 
 Optional for production metadata:
 
 - `NEXT_PUBLIC_SITE_URL` — Canonical site URL (Vercel sets `VERCEL_URL` automatically).
-
-For Convex persistence, follow the Convex dashboard and wire env vars from your deployment provider.
 
 ## Deploy
 

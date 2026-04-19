@@ -1,36 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { FramedLandingSvg } from "@/components/landing/FramedLandingSvg";
+import { SensorPipSvg } from "@/components/landing/inline/SensorPipSvg";
 import { MARKETING_SHOTS } from "@/components/marketing/marketingShotPresets";
 import { CaptureScene } from "@/components/marketing/shots/CaptureScene";
-import { FramedSvgShot } from "@/components/marketing/shots/FramedSvgShot";
 import { MockTacticalBoard } from "@/components/marketing/shots/MockTacticalBoard";
 
 export function MarketingShotsGallery() {
+  const searchParams = useSearchParams();
   const [hideLabels, setHideLabels] = useState(false);
 
   const anchors = useMemo(() => MARKETING_SHOTS.map((s) => s.anchor), []);
 
+  /** Authentic / WebGL mounts late; retry until the target section exists. */
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shot = params.get("shot");
+    const shot = searchParams.get("shot");
     if (!shot) return;
-    const el = document.getElementById(`shot-${shot}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 90;
+    const tick = () => {
+      if (cancelled) return;
+      const el = document.getElementById(`shot-${shot}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < maxAttempts) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-[color:var(--landing-fg)]">
       <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#050505]/95 px-4 py-3 backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ember">Marketing captures</p>
+            <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-ember">Marketing captures</p>
             <h1 className="font-sans text-lg font-semibold text-white">/imgs</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex cursor-pointer items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-landing-muted">
+            <label className="flex cursor-pointer items-center gap-2 font-sans text-[11px] font-medium tracking-[0.02em] text-landing-muted">
               <input
                 type="checkbox"
                 checked={hideLabels}
@@ -47,7 +65,7 @@ export function MarketingShotsGallery() {
             </Link>
           </div>
         </div>
-        <nav className="mx-auto mt-3 flex max-w-4xl flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
+        <nav className="mx-auto mt-3 flex max-w-4xl flex-wrap gap-2 font-sans text-[11px] font-medium tracking-[0.03em]">
           {anchors.map((a) => (
             <a key={a} className="text-ember/90 underline-offset-4 hover:underline" href={`#shot-${a}`}>
               {a}
@@ -64,11 +82,11 @@ export function MarketingShotsGallery() {
             className="scroll-mt-28 border-b border-white/[0.06] pb-16 last:border-0"
           >
             <div className={hideLabels ? "sr-only" : "mb-4"}>
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ember">{meta.title}</p>
+              <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-ember">{meta.title}</p>
               <p className="mt-1 max-w-2xl font-sans text-sm text-landing-muted">{meta.subtitle}</p>
-              <p className="mt-2 font-mono text-[10px] text-landing-muted">
+              <p className="mt-2 font-sans text-[11px] text-landing-muted">
                 Deep link:{" "}
-                <code className="text-landing-fg/80">
+                <code className="font-sans text-landing-fg/80">
                   /imgs?shot={meta.anchor}
                 </code>
               </p>
@@ -81,15 +99,13 @@ export function MarketingShotsGallery() {
                   <MockTacticalBoard />
                 </div>
               ) : null}
-              {meta.id === "problem" ? (
-                <FramedSvgShot src="/landing/console-hud.svg" alt="Console HUD reference" />
-              ) : null}
               {meta.id === "sensor" ? (
-                <FramedSvgShot
-                  src="/landing/sensor-pip.svg"
-                  alt="Sensor pip reference"
+                <FramedLandingSvg
+                  alt="Sensor PIP vector — export reference"
                   aspectClass="aspect-[8/5] max-h-[520px]"
-                />
+                >
+                  <SensorPipSvg />
+                </FramedLandingSvg>
               ) : null}
             </div>
           </section>

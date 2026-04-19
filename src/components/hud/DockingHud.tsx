@@ -2,23 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
+import {
+  formatControllerStateLabel,
+  guidanceHeaderStatusClass,
+  guidanceHeaderStatusLabel,
+} from "@/components/hud/controllerPresentation";
 import { MetricsPanel } from "@/components/hud/MetricsPanel";
 import { ReplayPanel } from "@/components/hud/ReplayPanel";
 import { ScenarioPanel } from "@/components/hud/ScenarioPanel";
-import { SegmentedBar, StagePipeline, TacticalPanel, ViewportFrame } from "@/components/hud/tactical-ui";
+import { SensorFeedViewport } from "@/components/hud/SensorFeedViewport";
+import { SegmentedBar, StagePipeline, TacticalPanel } from "@/components/hud/tactical-ui";
 import { CONTROLLER_SEQUENCE } from "@/lib/sim/constants";
 import { getDisplayedState } from "@/lib/sim/replay";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
-
-function controllerTone(state: string): "ok" | "warn" | "danger" | "neutral" {
-  if (state === "ABORT") return "danger";
-  if (state === "DOCKED") return "ok";
-  if (state === "INSERT") return "warn";
-  return "neutral";
-}
 
 type DockingHudProps = {
   /** Use inside a `relative` container (e.g. `/imgs` capture) instead of full-viewport fixed. */
@@ -26,11 +25,10 @@ type DockingHudProps = {
 };
 
 export function DockingHud({ embedded = false }: DockingHudProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const live = useSimStore((state) => state.live);
   const replaySamples = useSimStore((state) => state.replaySamples);
-  const sensorFrame = useSimStore((state) => state.sensorFrame);
   const persistMessage = useSimStore((state) => state.persistMessage);
+  const liveRunState = useUiStore((state) => state.liveRunState);
   const replayMode = useUiStore((state) => state.replayMode);
   const replayIndex = useUiStore((state) => state.replayIndex);
 
@@ -39,88 +37,79 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
     [live, replaySamples, replayMode, replayIndex],
   );
 
-  const tone = controllerTone(displayed.controllerState);
-
-  useEffect(() => {
-    if (!sensorFrame || !canvasRef.current) {
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    canvas.width = sensorFrame.width;
-    canvas.height = sensorFrame.height;
-    const safePixels = new Uint8ClampedArray(sensorFrame.width * sensorFrame.height * 4);
-    safePixels.set(sensorFrame.pixels);
-    const image = new ImageData(safePixels, sensorFrame.width, sensorFrame.height);
-    context.putImageData(image, 0, 0);
-  }, [sensorFrame]);
+  const headerClass = guidanceHeaderStatusClass(displayed.controllerState);
+  const headerLabel = guidanceHeaderStatusLabel(displayed.controllerState);
+  const shellStatusLabel = replayMode
+    ? "Replay"
+    : liveRunState === "running"
+      ? "Live"
+      : liveRunState === "paused"
+        ? "Paused"
+        : "Stopped";
+  const shellStatusClass = replayMode
+    ? "border-[color:var(--hud-warn)]/60 text-[color:var(--hud-warn)]"
+    : liveRunState === "running"
+      ? "border-[color:var(--hud-ok)]/50 text-[color:var(--hud-ok)]"
+      : liveRunState === "paused"
+        ? "border-[color:var(--hud-warn)]/60 text-[color:var(--hud-warn)]"
+        : "border-[color:var(--hud-line)] text-[color:var(--hud-muted)]";
 
   const rootLayout = embedded
     ? "pointer-events-none absolute inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]"
     : "pointer-events-none fixed inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]";
-
   return (
     <div className={rootLayout}>
-      <header className="pointer-events-auto flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Image src="/boom-logo.svg" alt="" width={28} height={28} className="shrink-0" />
-          <div className="min-w-0">
-            <p className="truncate font-sans text-[13px] font-semibold leading-tight tracking-tight text-[color:var(--hud-fg)]">
-              Boom
-            </p>
-            <p className="truncate font-sans text-[11px] font-normal leading-snug text-[color:var(--hud-muted)]">
-              Refueling dock sim
-            </p>
+      <header
+        data-tour="sim-header"
+        className="pointer-events-none shrink-0 px-2 pt-2 sm:px-3 sm:pt-3"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-full border border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <Image src="/boom-logo.svg" alt="" width={28} height={28} className="shrink-0" />
+            <div className="min-w-0">
+              <p className="truncate font-sans text-[13px] font-semibold leading-tight tracking-tight text-[color:var(--hud-fg)]">
+                Boom
+              </p>
+              <p className="truncate font-sans text-[11px] font-normal leading-snug text-[color:var(--hud-muted)]">
+                Refueling dock sim
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <span
-            className={`rounded border px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.08em] ${
-              replayMode
-                ? "border-[color:var(--hud-warn)]/60 text-[color:var(--hud-warn)]"
-                : "border-[color:var(--hud-ok)]/50 text-[color:var(--hud-ok)]"
-            }`}
-          >
-            {replayMode ? "Replay" : "Live"}
-          </span>
-          <span className="hidden font-mono text-[11px] tabular-nums text-[color:var(--hud-muted)] sm:inline">
-            T+{displayed.simTime.toFixed(1)}s
-          </span>
-          <span className="hidden font-mono text-[11px] tabular-nums text-[color:var(--hud-muted)] md:inline">
-            FR{displayed.frame}
-          </span>
-          <Link
-            href="/"
-            className="rounded border border-[color:var(--hud-line)] px-2 py-0.5 font-mono text-[11px] text-[color:var(--hud-muted)] transition hover:border-[color:var(--hud-accent)]/50 hover:text-[color:var(--hud-accent-fg)]"
-          >
-            Home
-          </Link>
+          <div className="pointer-events-auto ml-auto inline-flex max-w-full items-center justify-end gap-2 rounded-full border border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:gap-3">
+            <span
+              className={`rounded-full border px-2 py-0.5 font-sans text-[11px] font-medium tracking-[0.02em] ${shellStatusClass}`}
+            >
+              {shellStatusLabel}
+            </span>
+            <span className="hidden font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)] sm:inline">
+              T+{displayed.simTime.toFixed(1)}s
+            </span>
+            <span className="hidden font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)] md:inline">
+              Frame {displayed.frame}
+            </span>
+            <Link
+              href="/"
+              className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[11px] font-medium text-[color:var(--hud-muted)] transition hover:border-[color:var(--hud-accent)]/50 hover:text-[color:var(--hud-accent-fg)]"
+            >
+              Home
+            </Link>
+          </div>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden sm:gap-3 lg:flex-row lg:justify-between">
-        <aside className="pointer-events-auto flex max-h-[46vh] min-h-0 w-full min-w-0 flex-col gap-2 overflow-y-auto px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:max-h-none lg:w-[min(22rem,40vw)] lg:pl-3 lg:pr-1 lg:pt-3 lg:pb-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-2 pb-3 pt-2 sm:gap-3 sm:px-3 sm:pb-4 sm:pt-3 lg:flex-row lg:justify-between">
+        <aside
+          className="pointer-events-auto flex min-h-0 min-w-0 basis-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] lg:grid lg:w-[min(22rem,40vw)] lg:flex-none lg:overflow-hidden lg:grid-rows-[minmax(0,1.2fr)_minmax(0,0.8fr)]"
+        >
           <TacticalPanel
+            data-tour="guidance-panel"
+            className="min-h-0 lg:h-full"
+            scrollBody
             title="Guidance"
-            subtitle={`${displayed.controllerState} · camera + track`}
+            subtitle={`${formatControllerStateLabel(displayed.controllerState)} · passive multispectral track`}
             headerRight={
-              <span
-                className={`font-mono text-[11px] uppercase tracking-[0.1em] tabular-nums ${
-                  tone === "danger"
-                    ? "text-[color:var(--hud-danger)]"
-                    : tone === "ok"
-                      ? "text-[color:var(--hud-ok)]"
-                      : tone === "warn"
-                        ? "text-[color:var(--hud-warn)]"
-                        : "text-[color:var(--hud-muted)]"
-                }`}
-              >
-                {tone === "danger" ? "Fault" : tone === "ok" ? "Captured" : tone === "warn" ? "Hot" : "Nominal"}
+              <span className={`font-sans text-[11px] font-medium tracking-[0.02em] tabular-nums ${headerClass}`}>
+                {headerLabel}
               </span>
             }
           >
@@ -132,33 +121,38 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
               <span className="mx-2 text-[color:var(--hud-line)]">|</span>
               Conf{" "}
               <span className="tabular-nums text-[color:var(--hud-fg)]">
-                {(displayed.estimate.confidence * 100).toFixed(0)}%
+                {(displayed.tracker.confidence * 100).toFixed(0)}%
               </span>
             </div>
 
             <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
-              <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">Synthetic EO/IR — geometry track (no ML)</p>
-              <ViewportFrame className="mt-2 overflow-hidden">
-                <div className="relative aspect-square w-full">
-                  <canvas ref={canvasRef} className="h-full w-full object-cover opacity-95" />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="h-[62%] w-[62%] border border-[color:var(--hud-accent)]/25" />
-                    <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[color:var(--hud-accent)]/15" />
-                    <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[color:var(--hud-accent)]/15" />
-                  </div>
-                </div>
-              </ViewportFrame>
+              <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">
+                Passive visible / thermal handoff · {displayed.estimate.sensorName}
+              </p>
+              <p className="mt-1 font-sans text-[11px] text-[color:var(--hud-fg)]">
+                {displayed.estimate.modality} · {displayed.tracker.preferredRole} track · {displayed.estimate.notes.join(" · ")}
+              </p>
+              <div data-tour="sensor-feed">
+                <SensorFeedViewport viewportFrameClassName="mt-2 overflow-hidden" />
+              </div>
             </div>
 
-            <SegmentedBar value={displayed.estimate.confidence} />
+            <SegmentedBar value={displayed.tracker.confidence} />
 
             <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
+              <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">Autopilot output</p>
+              <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-fg)]">
+                moveECEF({(displayed.autopilotCommand.dx * 100).toFixed(1)}, {(displayed.autopilotCommand.dy * 100).toFixed(1)}, {(displayed.autopilotCommand.dz * 100).toFixed(1)}) cm
+              </p>
+            </div>
+
+            <div data-tour="controller-pipeline" className="border-t border-[color:var(--hud-line)] px-3 py-2">
               <p className="mb-2 font-sans text-[11px] text-[color:var(--hud-muted)]">Controller states (left → right)</p>
               <StagePipeline sequence={CONTROLLER_SEQUENCE} active={displayed.controllerState} />
             </div>
 
             {displayed.abortReason ? (
-              <p className="border-t border-[color:var(--hud-line)] px-3 py-2 font-mono text-[11px] text-[color:var(--hud-danger)]">
+              <p className="border-t border-[color:var(--hud-line)] px-3 py-2 font-sans text-[11px] text-[color:var(--hud-danger)]">
                 Abort: {displayed.abortReason}
               </p>
             ) : null}
@@ -172,18 +166,13 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
           <MetricsPanel state={displayed} />
         </aside>
 
-        <aside className="pointer-events-auto flex max-h-[46vh] min-h-0 w-full min-w-0 flex-col gap-2 overflow-y-auto px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:max-h-none lg:w-[min(22rem,40vw)] lg:pl-1 lg:pr-3 lg:pt-3 lg:pb-3">
+        <aside
+          className="pointer-events-auto flex min-h-0 min-w-0 basis-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] lg:grid lg:w-[min(22rem,40vw)] lg:flex-none lg:overflow-hidden lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
+        >
           <ScenarioPanel />
           <ReplayPanel state={displayed} />
         </aside>
       </div>
-
-      <footer className="pointer-events-none hidden border-t border-[color:var(--hud-line)] bg-[color:var(--hud-panel)]/90 px-3 py-2 font-mono text-[11px] text-[color:var(--hud-muted)] sm:block">
-        <div className="mx-auto flex max-w-[90rem] justify-between gap-4">
-          <span>Bun · Next · R3F</span>
-          <span>{replayMode ? "Replay buffer · scrub timeline" : "Live sim · save optional"}</span>
-        </div>
-      </footer>
     </div>
   );
 }

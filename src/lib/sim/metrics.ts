@@ -1,10 +1,19 @@
 import { distanceVec3, saturate, subVec3 } from "@/lib/sim/math";
-import type { PerceptionEstimate, SimMetrics, Vec3 } from "@/lib/sim/types";
+import type {
+  AutopilotCommandECEF,
+  SensorObservation,
+  SimMetrics,
+  TrackerState,
+  Vec3,
+} from "@/lib/sim/types";
 
 type MetricsInput = {
   boomTip: Vec3;
   target: Vec3;
-  estimate: PerceptionEstimate;
+  tracker: TrackerState;
+  estimate: SensorObservation;
+  observations: SensorObservation[];
+  autopilotCommand: AutopilotCommandECEF;
   previousMetrics: SimMetrics;
   dt: number;
 };
@@ -12,7 +21,10 @@ type MetricsInput = {
 export function computeMetrics({
   boomTip,
   target,
+  tracker,
   estimate,
+  observations,
+  autopilotCommand,
   previousMetrics,
   dt,
 }: MetricsInput): SimMetrics {
@@ -30,10 +42,14 @@ export function computeMetrics({
     lateralError,
     forwardError,
     closureRate,
-    confidence: estimate.confidence,
-    dockScore: saturate(1 - positionError / 8 + estimate.confidence * 0.35),
+    confidence: tracker.confidence,
+    dockScore: saturate(1 - positionError / 8 + tracker.confidence * 0.45),
     alignmentError: lateralError,
-    dropoutCount: previousMetrics.dropoutCount + (estimate.dropout ? 1 : 0),
+    dropoutCount: previousMetrics.dropoutCount + observations.filter((observation) => observation.dropout).length,
     visibleTime: previousMetrics.visibleTime + (estimate.visible ? dt : 0),
+    sensorDisagreement: tracker.disagreement,
+    activeSensorCount: tracker.activeSensorIds.length,
+    trackRange: estimate.range,
+    commandMagnitude: autopilotCommand.magnitude,
   };
 }

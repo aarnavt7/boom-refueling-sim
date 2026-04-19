@@ -1,11 +1,11 @@
-# Landing capture PNGs
+# Optional PNG captures
 
-Export screenshots from [http://localhost:3000/imgs](http://localhost:3000/imgs) and save **high-resolution** PNGs here:
+Drop high-res exports from `/imgs` here if you want raster heroes **instead of** the default vector in `public/landing/sensor-pip.svg`.
 
-| Filename | Use on site |
-|----------|-------------|
-| `problem-rehearsal-16x9.png` | Problem section (“Rehearsal shouldn’t be scattered”) |
-| `media-tactical-frame.png` | Media strip — tactical diagram |
-| `media-sensor-pip.png` | Media strip — sensor viewport |
+Paths are referenced by `LANDING_IMAGES` in `src/lib/landing/landingImageAssets.ts` (optional — the live Problem section uses WebGL + HUD).
 
-Replace the tiny placeholder files. Paths are defined in `src/lib/landing/landingImageAssets.ts`.
+| Filename | Suggested use |
+|----------|----------------|
+| `problem-rehearsal-16x9.png` | Replace Problem art |
+| `media-tactical-frame.png` | Replace marketing tiles |
+| `media-sensor-pip.png` | Replace sensor reference art |

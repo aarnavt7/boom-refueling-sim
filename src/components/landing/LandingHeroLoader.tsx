@@ -3,9 +3,7 @@
 import Image from "next/image";
 import { useEffect } from "react";
 
-import { RECEIVER_VISUAL_CONFIG, TANKER_VISUAL_CONFIG } from "@/lib/sim/aircraftVisualConfig";
-
-const GLB_URLS = [TANKER_VISUAL_CONFIG.assetPath, RECEIVER_VISUAL_CONFIG.assetPath];
+import { AIRCRAFT_ASSET_PATHS } from "@/lib/sim/aircraftVisualConfig";
 
 type LandingHeroLoaderProps = {
   /** When true, no solid panel background — parent supplies black (boot overlay). */
@@ -17,7 +15,7 @@ type LandingHeroLoaderProps = {
  */
 export function LandingHeroLoader({ bare = false }: LandingHeroLoaderProps) {
   useEffect(() => {
-    for (const url of GLB_URLS) {
+    for (const url of AIRCRAFT_ASSET_PATHS) {
       void fetch(url, { mode: "cors", credentials: "same-origin", cache: "force-cache" });
     }
   }, []);
@@ -74,11 +72,11 @@ export function LandingHeroLoader({ bare = false }: LandingHeroLoaderProps) {
           </div>
         </div>
 
-        <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.28em] text-ember/90">
+        <p className="mt-8 font-sans text-[11px] font-medium tracking-[0.04em] text-ember/90">
           Initializing
         </p>
-        <p className="mt-2 max-w-xs text-center font-mono text-[9px] uppercase leading-relaxed tracking-[0.18em] text-landing-muted">
-          Synthetic ops · standby
+        <p className="mt-2 max-w-xs text-center font-sans text-[11px] leading-relaxed text-landing-muted">
+          Synthetic ops standing by.
         </p>
       </div>
 

@@ -12,6 +12,7 @@ import {
   SKY_TURBIDITY,
 } from "@/components/scene/sunConfig";
 import { SIM_CONTENT_LAYER } from "@/lib/sim/sceneLayers";
+import { useSimStore } from "@/lib/store/simStore";
 
 function applySkyRenderRules(node: THREE.Mesh | null) {
   if (!node) return;
@@ -37,9 +38,16 @@ function applySkyRenderRules(node: THREE.Mesh | null) {
  * - Layers **0 + SIM_CONTENT_LAYER**: default camera always sees layer 0; sim + sensor use layer 1.
  *   Using only `layers.set(1)` meant the first frames (before `MainCameraLayerSync`) could miss the sky.
  */
-export function StratosphereSky() {
+export function StratosphereSky({ variant = "sim" }: { variant?: "sim" | "landing" | "capture" }) {
+  const environment = useSimStore((state) => state.scenario.environment);
   const meshRef = useRef<THREE.Mesh | null>(null);
-  const sunPosition = useMemo(() => getSkySunPosition(), []);
+  const sunPosition = useMemo(
+    () => getSkySunPosition(environment.keyLightAzimuth, environment.keyLightElevation),
+    [environment.keyLightAzimuth, environment.keyLightElevation],
+  );
+  const rayleigh = environment.timeOfDay === "night" ? SKY_RAYLEIGH * 0.12 : SKY_RAYLEIGH;
+  const turbidity = environment.timeOfDay === "night" ? SKY_TURBIDITY * 0.7 : SKY_TURBIDITY;
+  const mieCoefficient = environment.timeOfDay === "night" ? SKY_MIE_COEFFICIENT * 0.35 : SKY_MIE_COEFFICIENT;
 
   const skyRef = useCallback((node: THREE.Mesh | null) => {
     meshRef.current = node;
@@ -50,14 +58,18 @@ export function StratosphereSky() {
     applySkyRenderRules(meshRef.current);
   }, []);
 
+  if (environment.timeOfDay === "night" && variant === "sim") {
+    return null;
+  }
+
   return (
     <Sky
       ref={skyRef}
       material-fog={false}
       sunPosition={sunPosition}
-      turbidity={SKY_TURBIDITY}
-      rayleigh={SKY_RAYLEIGH}
-      mieCoefficient={SKY_MIE_COEFFICIENT}
+      turbidity={variant === "landing" ? turbidity * 0.92 : turbidity}
+      rayleigh={variant === "landing" ? rayleigh * 0.9 : rayleigh}
+      mieCoefficient={variant === "landing" ? mieCoefficient * 1.08 : mieCoefficient}
       mieDirectionalG={SKY_MIE_DIRECTIONAL_G}
       distance={450000}
     />

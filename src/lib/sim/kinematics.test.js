@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 
 import { INITIAL_BOOM_STATE, JOINT_LIMITS, RATE_LIMITS } from "./constants.ts";
-import { applyIncrementCommand, getBoomDirection } from "./kinematics.ts";
+import { applyIncrementCommand, getBoomDirection, getBoomTipPose, solveBoomIK } from "./kinematics.ts";
 
 function expectVecClose(actual, expected, tolerance = 1e-9) {
   expect(Math.abs(actual.x - expected.x)).toBeLessThan(tolerance);
@@ -44,5 +44,20 @@ describe("sim kinematics", () => {
     expect(next.yaw).toBe(JOINT_LIMITS.yaw.max);
     expect(next.pitch).toBe(JOINT_LIMITS.pitch.min);
     expect(next.extend).toBe(JOINT_LIMITS.extend.max);
+  });
+
+  test("solveBoomIK reconstructs the current boom tip pose", () => {
+    const joints = {
+      yaw: 0.18,
+      pitch: -0.22,
+      extend: 8.9,
+    };
+
+    const target = getBoomTipPose(joints).position;
+    const solved = solveBoomIK(target);
+
+    expect(solved.yaw).toBeCloseTo(joints.yaw, 2);
+    expect(solved.pitch).toBeCloseTo(joints.pitch, 2);
+    expect(solved.extend).toBeCloseTo(joints.extend, 2);
   });
 });

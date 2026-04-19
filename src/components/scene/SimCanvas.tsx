@@ -5,13 +5,13 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { BoomRig } from "@/components/scene/BoomRig";
 import { DebugHelpers } from "@/components/scene/DebugHelpers";
 import {
   LandingFlybyController,
   LANDING_HERO_CAMERA_FOV,
   LANDING_HERO_CAMERA_POSITION,
 } from "@/components/scene/LandingFlybyController";
+import { MainCameraPostProcessing } from "@/components/scene/MainCameraPostProcessing";
 import { CaptureCameraRig } from "@/components/scene/CaptureCameraRig";
 import { LandingSceneReadyNotifier } from "@/components/scene/LandingSceneReadyNotifier";
 import {
@@ -21,29 +21,31 @@ import {
 import { Receiver } from "@/components/scene/Receiver";
 import { SceneLighting } from "@/components/scene/SceneLighting";
 import { SimContentLayer } from "@/components/scene/SimContentLayer";
+import { TankerAssembly } from "@/components/scene/TankerAssembly";
+import { TutorialCameraRig } from "@/components/scene/TutorialCameraRig";
 import {
-  CANVAS_CLEAR,
+  CAPTURE_CANVAS_CLEAR,
+  CAPTURE_TONE_MAPPING_EXPOSURE,
   LANDING_CANVAS_CLEAR,
   LANDING_TONE_MAPPING_EXPOSURE,
+  SIM_CANVAS_CLEAR,
+  SIM_TONE_MAPPING_EXPOSURE,
 } from "@/components/scene/sunConfig";
-import { Tanker } from "@/components/scene/Tanker";
 import {
   MAIN_CAMERA_POSITION,
   MAIN_CAMERA_TARGET,
 } from "@/lib/sim/aircraftVisualConfig";
+import { getReceiverReceptacleWorld, getTankerPose } from "@/lib/sim/aircraftAttachments";
 import {
-  EMPTY_ESTIMATE,
-  EMPTY_SAFETY,
   MAX_FRAME_DT,
-  RECEIVER_RECEPTACLE_LOCAL,
   SENSOR_RESOLUTION,
 } from "@/lib/sim/constants";
+import { applyAutopilotCommand, toAutopilotCommandECEF } from "@/lib/sim/autopilot";
 import { updateController } from "@/lib/sim/controller";
-import { getBoomTipPose, applyIncrementCommand } from "@/lib/sim/kinematics";
-import { worldFromLocalOffset } from "@/lib/sim/math";
+import { getBoomTipPose } from "@/lib/sim/kinematics";
 import { computeMetrics } from "@/lib/sim/metrics";
 import { sampleReceiverPose } from "@/lib/sim/motion";
-import { runGeometryPerception } from "@/lib/sim/perception";
+import { runPassivePerception } from "@/lib/sim/perception";
 import {
   clampReplayIndex,
   createReplaySample,
@@ -53,6 +55,8 @@ import { createSensorRenderTarget, readSensorFrame } from "@/lib/sim/renderTarge
 import { evaluateSafety } from "@/lib/sim/safety";
 import { SIM_CONTENT_LAYER } from "@/lib/sim/sceneLayers";
 import { updateTracker } from "@/lib/sim/tracker";
+import { isCaptureSimDriverActive, registerCaptureSimDriver } from "@/lib/sim/simDriver";
+import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
@@ -82,17 +86,52 @@ function SimulationWorld({
   simVariant = "sim",
 }: WorldProps) {
   const clear =
-    environmentVariant === "landing" ? LANDING_CANVAS_CLEAR : CANVAS_CLEAR;
+    environmentVariant === "landing"
+      ? LANDING_CANVAS_CLEAR
+      : environmentVariant === "capture"
+        ? CAPTURE_CANVAS_CLEAR
+        : SIM_CANVAS_CLEAR;
   const scene = useThree((state) => state.scene);
   const gl = useThree((state) => state.gl);
   const captureAccumulator = useRef(0);
   const replayAccumulator = useRef(0);
+  const allowOrbitControls = useOnboardingStore((state) => state.allowOrbitControls);
 
   useFrame((_, delta) => {
+    if (simVariant === "landing" && isCaptureSimDriverActive()) {
+      return;
+    }
+
     const uiState = useUiStore.getState();
     const simState = useSimStore.getState();
 
+    const refreshSensorFrame = (forceRead = false) => {
+      const sensorCamera = sensorCameraRef.current;
+      if (!sensorCamera) {
+        return;
+      }
+
+      sensorCamera.updateWorldMatrix(true, false);
+      const previousTarget = gl.getRenderTarget();
+      gl.setRenderTarget(sensorTarget);
+      gl.clear();
+      gl.render(scene, sensorCamera);
+      gl.setRenderTarget(previousTarget);
+
+      captureAccumulator.current += delta;
+      const needsFrame =
+        forceRead || simState.sensorFrame === null || captureAccumulator.current >= 0.12;
+      if (!needsFrame) {
+        return;
+      }
+
+      captureAccumulator.current = 0;
+      simState.setSensorFrame(readSensorFrame(gl, sensorTarget, SENSOR_RESOLUTION, SENSOR_RESOLUTION));
+    };
+
     if (uiState.simFrozen) {
+      /** Physics are paused but keep refreshing the sensor RTT read so the PIP stays valid (not stuck black). */
+      refreshSensorFrame(true);
       return;
     }
 
@@ -113,52 +152,48 @@ function SimulationWorld({
       return;
     }
 
+    if (simVariant === "sim" && uiState.liveRunState !== "running") {
+      if (simState.sensorFrame === null) {
+        refreshSensorFrame(true);
+      }
+      return;
+    }
+
     const dt = Math.min(delta, MAX_FRAME_DT);
     const previous = simState.live;
     const scenario = simState.scenario;
     const simTime = previous.simTime + dt;
 
     const receiverPose = sampleReceiverPose(simTime, scenario);
-    const targetPosition = worldFromLocalOffset(
-      receiverPose.position,
-      receiverPose.rotation,
-      RECEIVER_RECEPTACLE_LOCAL,
-    );
+    const targetPosition = getReceiverReceptacleWorld(receiverPose);
     const targetPose = {
       position: targetPosition,
       rotation: receiverPose.rotation,
     };
 
-    let estimate = EMPTY_ESTIMATE;
-    const sensorCamera = sensorCameraRef.current;
-    if (sensorCamera) {
-      sensorCamera.updateWorldMatrix(true, false);
-      const previousTarget = gl.getRenderTarget();
-      gl.setRenderTarget(sensorTarget);
-      gl.clear();
-      gl.render(scene, sensorCamera);
-      gl.setRenderTarget(previousTarget);
+    const perception = runPassivePerception({
+      boom: previous.boom,
+      targetPose,
+      scenario,
+      simTime,
+    });
+    const estimate = perception.estimate;
+    refreshSensorFrame();
 
-      estimate = runGeometryPerception({
-        camera: sensorCamera,
-        targetWorld: targetPosition,
-        scenario,
-        simTime,
-      });
-
-      captureAccumulator.current += delta;
-      if (captureAccumulator.current >= 0.12) {
-        captureAccumulator.current = 0;
-        simState.setSensorFrame(readSensorFrame(gl, sensorTarget, SENSOR_RESOLUTION, SENSOR_RESOLUTION));
-      }
-    }
-
-    const tracker = updateTracker(previous.tracker, estimate, dt);
+    const tracker = updateTracker(previous.tracker, perception.observations, dt);
     const boomTipBefore = getBoomTipPose(previous.boom).position;
+    const receiverVelocity = {
+      x: (receiverPose.position.x - previous.receiverPose.position.x) / Math.max(dt, 1e-3),
+      y: (receiverPose.position.y - previous.receiverPose.position.y) / Math.max(dt, 1e-3),
+      z: (receiverPose.position.z - previous.receiverPose.position.z) / Math.max(dt, 1e-3),
+    };
     const metricsBefore = computeMetrics({
       boomTip: boomTipBefore,
       target: targetPosition,
+      tracker,
       estimate,
+      observations: perception.observations,
+      autopilotCommand: previous.autopilotCommand,
       previousMetrics: previous.metrics,
       dt,
     });
@@ -170,23 +205,26 @@ function SimulationWorld({
       boomTip: boomTipBefore,
       trackedTarget: tracker,
       estimate,
-      safety: EMPTY_SAFETY,
+      safety: previous.safety,
       simTime,
     });
 
-    let safety = evaluateSafety({
+    const safety = evaluateSafety({
       state: controller.state,
       scenario,
       metrics: metricsBefore,
       previousMetrics: previous.metrics,
       boomTip: boomTipBefore,
       receiverPose,
-      trackerConfidence: tracker.confidence,
+      receiverVelocity,
+      tracker,
+      observations: perception.observations,
+      manualAbort: uiState.manualAbort,
     });
 
-    if (safety.abort) {
+    if (safety.abort || safety.breakaway || safety.hold) {
       controller = updateController({
-        state: "ABORT",
+        state: previous.controllerState,
         scenario,
         boom: previous.boom,
         boomTip: boomTipBefore,
@@ -195,30 +233,26 @@ function SimulationWorld({
         safety,
         simTime,
       });
-    } else if (safety.hold) {
-      controller = {
-        ...controller,
-        command: {
-          ...controller.command,
-          extendRate: Math.min(controller.command.extendRate, 0),
-        },
-      };
     }
 
-    const nextBoom = applyIncrementCommand(previous.boom, controller.command, dt);
+    const autopilotCommand = toAutopilotCommandECEF(controller.desiredTipMotion, getTankerPose());
+    const plant = applyAutopilotCommand(previous.boom, autopilotCommand, getTankerPose(), dt);
+    const nextBoom = plant.nextBoom;
     const boomTipAfter = getBoomTipPose(nextBoom).position;
     const metrics = computeMetrics({
       boomTip: boomTipAfter,
       target: targetPosition,
+      tracker,
       estimate,
+      observations: perception.observations,
+      autopilotCommand,
       previousMetrics: previous.metrics,
       dt,
     });
 
-    safety = {
-      ...safety,
-      hold: safety.hold || tracker.confidence < 0.25,
-    };
+    if (uiState.manualAbort && (controller.state === "BREAKAWAY" || controller.state === "ABORT")) {
+      useUiStore.getState().clearManualAbort();
+    }
 
     const live = {
       simTime,
@@ -226,13 +260,18 @@ function SimulationWorld({
       receiverPose,
       targetPose,
       boom: nextBoom,
-      command: controller.command,
+      autopilotCommand,
+      command: plant.command,
       controllerState: controller.state,
+      sensorObservations: perception.observations,
       estimate,
       tracker,
       safety,
       metrics,
-      abortReason: controller.state === "ABORT" ? safety.reasons[0] ?? previous.abortReason : null,
+      abortReason:
+        controller.state === "ABORT" || controller.state === "BREAKAWAY"
+          ? safety.reasons[0] ?? previous.abortReason
+          : null,
     };
 
     simState.setLive(live);
@@ -250,9 +289,8 @@ function SimulationWorld({
       <OuterEnvironment variant={environmentVariant} />
       <SceneLighting />
       <SimContentLayer>
-        <Tanker />
+        <TankerAssembly sensorCameraRef={sensorCameraRef} />
         <Receiver />
-        <BoomRig sensorCameraRef={sensorCameraRef} />
       </SimContentLayer>
       <DebugHelpers />
       {environmentVariant === "landing" ? (
@@ -260,13 +298,17 @@ function SimulationWorld({
       ) : simVariant === "capture" ? (
         <CaptureCameraRig />
       ) : (
-        <OrbitControls
-          makeDefault
-          target={[MAIN_CAMERA_TARGET.x, MAIN_CAMERA_TARGET.y, MAIN_CAMERA_TARGET.z]}
-          minDistance={9}
-          maxDistance={38}
-          maxPolarAngle={Math.PI * 0.46}
-        />
+        <>
+          <OrbitControls
+            enabled={allowOrbitControls}
+            makeDefault
+            target={[MAIN_CAMERA_TARGET.x, MAIN_CAMERA_TARGET.y, MAIN_CAMERA_TARGET.z]}
+            minDistance={9}
+            maxDistance={38}
+            maxPolarAngle={Math.PI * 0.46}
+          />
+          <TutorialCameraRig />
+        </>
       )}
     </>
   );
@@ -275,11 +317,14 @@ function SimulationWorld({
 export function SimCanvas({
   variant = "sim",
   onLandingReady,
+  onSimReady,
   landingForceRender,
 }: {
   variant?: SimCanvasVariant;
   /** Landing only: called once assets + first paints are ready (boot overlay dismisses). */
   onLandingReady?: () => void;
+  /** Fullscreen `/sim` only: called once HDR/env assets report loaded (for boot overlay). */
+  onSimReady?: () => void;
   /** Landing only: keep the render loop running (e.g. while boot overlay hides the hero). */
   landingForceRender?: boolean;
 }) {
@@ -289,9 +334,17 @@ export function SimCanvas({
   const [heroVisible, setHeroVisible] = useState(true);
 
   const clearColor =
-    variant === "landing" ? LANDING_CANVAS_CLEAR : CANVAS_CLEAR;
+    variant === "landing"
+      ? LANDING_CANVAS_CLEAR
+      : variant === "capture"
+        ? CAPTURE_CANVAS_CLEAR
+        : SIM_CANVAS_CLEAR;
   const toneExposure =
-    variant === "landing" ? LANDING_TONE_MAPPING_EXPOSURE : 0.72;
+    variant === "landing"
+      ? LANDING_TONE_MAPPING_EXPOSURE
+      : variant === "capture"
+        ? CAPTURE_TONE_MAPPING_EXPOSURE
+        : SIM_TONE_MAPPING_EXPOSURE;
 
   const outerEnv: OuterEnvironmentVariant =
     variant === "landing" ? "landing" : variant === "capture" ? "capture" : "sim";
@@ -301,6 +354,11 @@ export function SimCanvas({
       sensorTarget.dispose();
     };
   }, [sensorTarget]);
+
+  useLayoutEffect(() => {
+    if (variant !== "capture") return;
+    return registerCaptureSimDriver();
+  }, [variant]);
 
   useEffect(() => {
     if (variant !== "landing") return;
@@ -319,6 +377,7 @@ export function SimCanvas({
   return (
     <div
       ref={containerRef}
+      data-tour={variant === "sim" ? "main-viewport" : undefined}
       className={
         variant === "landing" || variant === "capture"
           ? variant === "capture"
@@ -365,7 +424,7 @@ export function SimCanvas({
           camera.layers.enable(SIM_CONTENT_LAYER);
           scene.background = new THREE.Color(clearColor);
           gl.setClearColor(clearColor, 1);
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMapping = THREE.AgXToneMapping;
           gl.toneMappingExposure = toneExposure;
           gl.outputColorSpace = THREE.SRGBColorSpace;
         }}
@@ -376,8 +435,12 @@ export function SimCanvas({
           environmentVariant={outerEnv}
           simVariant={variant}
         />
+        <MainCameraPostProcessing variant={variant} />
         {variant === "landing" && onLandingReady ? (
           <LandingSceneReadyNotifier onReady={onLandingReady} />
+        ) : null}
+        {variant === "sim" && onSimReady ? (
+          <LandingSceneReadyNotifier onReady={onSimReady} minHoldMs={0} />
         ) : null}
       </Canvas>
     </div>

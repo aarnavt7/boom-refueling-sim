@@ -1,4 +1,4 @@
-export type MarketingShotId = "problem" | "tactical" | "sensor" | "authentic";
+export type MarketingShotId = "tactical" | "sensor" | "authentic";
 
 export type MarketingShotMeta = {
   id: MarketingShotId;
@@ -14,7 +14,7 @@ export const MARKETING_SHOTS: MarketingShotMeta[] = [
     anchor: "authentic",
     title: "Authentic — 3D + full HUD (freeze frame)",
     subtitle:
-      "Use for Problem hero or full-width console. Waits ~4s then freezes sim for a clean screenshot. Crop the left column for “tactical diagram” or the sensor square for PIP.",
+      "Waits ~4s then freezes sim for a clean screenshot. Crop the left column for “tactical diagram” or the sensor square for PIP.",
   },
   {
     id: "tactical",
@@ -23,15 +23,10 @@ export const MARKETING_SHOTS: MarketingShotMeta[] = [
     subtitle: "Diagram-style frame — no WebGL. Good for crisp marketing SVG/PNG export.",
   },
   {
-    id: "problem",
-    anchor: "svg-console",
-    title: "SVG — console (legacy art)",
-    subtitle: "Large framed reference: same asset as current landing until you replace captures.",
-  },
-  {
     id: "sensor",
     anchor: "svg-sensor",
-    title: "SVG — sensor schematic",
-    subtitle: "Framed sensor-pip.svg for replacement comparison.",
+    title: "Sensor PIP (SVG export)",
+    subtitle:
+      "Crisp PIP schematic in public/landing/sensor-pip.svg — pairs with the tactical mock; swap for sensor crops from Authentic when ready.",
   },
 ];

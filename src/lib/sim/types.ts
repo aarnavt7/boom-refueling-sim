@@ -15,18 +15,49 @@ export type Euler3 = {
   z: number;
 };
 
+export type CameraMode = "manual" | "receiver-lock" | "dock-lock";
+
+export type ReplayDataSource = "session" | "autonomy";
+
+export type EvaluationView = "baseline" | "uploaded" | "overlay";
+
+export type AircraftCardId =
+  | "kc46_f15"
+  | "kc135_f16"
+  | "kc10_f22"
+  | "a330_rafale";
+
 export type Pose = {
   position: Vec3;
   rotation: Euler3;
 };
 
+export type TimeOfDay = "day" | "night";
+
+export type SurfaceType = "land" | "water";
+
+export type EmissionMode = "normal" | "EMCON";
+
+export type SensorMountId =
+  | "tail-acq-left"
+  | "tail-acq-right"
+  | "boom-term-left"
+  | "boom-term-right";
+
+export type SensorRole = "acquire" | "terminal";
+
+export type SensorModality = "visible" | "thermal";
+
 export type ControllerState =
   | "SEARCH"
   | "ACQUIRE"
+  | "TRACK"
   | "ALIGN"
   | "INSERT"
-  | "DOCKED"
-  | "ABORT";
+  | "MATED"
+  | "HOLD"
+  | "ABORT"
+  | "BREAKAWAY";
 
 export type BoomJointState = {
   yaw: number;
@@ -40,24 +71,124 @@ export type BoomCommand = {
   extendRate: number;
 };
 
-export type PerceptionEstimate = {
+export type SensorRigDefinition = {
+  id: SensorMountId;
+  name: string;
+  role: SensorRole;
+  supportedModalities: SensorModality[];
+  /** Local offset from either the boom root (`tail-*`) or boom tip (`boom-term-*`). */
+  localOffset: Vec3;
+  /** Local mount rotation relative to the parent frame. */
+  localRotation: Euler3;
+  fovDeg: number;
+  aspect: number;
+  near: number;
+  far: number;
+  maxRange: number;
+  stereoPartner?: SensorMountId;
+};
+
+export type SensorObservation = {
+  sensorId: SensorMountId;
+  sensorName: string;
+  role: SensorRole;
+  modality: SensorModality;
   visible: boolean;
   dropout: boolean;
   confidence: number;
   estimatedPosition: Vec3 | null;
+  estimatedPose: Pose | null;
   imagePoint: Vec2 | null;
   cameraSpacePosition: Vec3 | null;
+  range: number;
+  usedForTrack: boolean;
+  notes: string[];
 };
 
-export type TrackerState = {
+export type PerceptionEstimate = SensorObservation;
+
+export type FusedReceptacleTrack = {
+  pose: Pose | null;
   position: Vec3 | null;
   velocity: Vec3;
   confidence: number;
+  covariance: Vec3;
+  activeSensorIds: SensorMountId[];
+  preferredRole: SensorRole;
+  disagreement: number;
+  lost: boolean;
+};
+
+export type TrackerState = FusedReceptacleTrack;
+
+export type DesiredTipMotion = {
+  deltaBody: Vec3;
+  mode: "track" | "hold" | "retract" | "breakaway";
+};
+
+export type AutopilotCommandECEF = {
+  dx: number;
+  dy: number;
+  dz: number;
+  magnitude: number;
+  clamped: boolean;
+  mode: DesiredTipMotion["mode"];
+};
+
+export type EnvironmentProfile = {
+  id: string;
+  name: string;
+  timeOfDay: TimeOfDay;
+  surfaceType: SurfaceType;
+  emissionMode: EmissionMode;
+  description: string;
+  /** Visible-spectrum quality multiplier. */
+  visibleSNR: number;
+  /** Thermal contrast quality multiplier. */
+  thermalContrast: number;
+  /** Horizon/background ambiguity penalty. */
+  horizonAmbiguity: number;
+  /** Water glint / reflection penalty. */
+  glint: number;
+  /** Scene styling helpers for the 3D view. */
+  clearColor: string;
+  fogColor: string;
+  fogDensity: number;
+  ambientIntensity: number;
+  keyLightIntensity: number;
+  fillLightIntensity: number;
+  keyLightColor: string;
+  fillLightColor: string;
+  keyLightAzimuth: number;
+  keyLightElevation: number;
+  backgroundPreset: "land" | "water";
+};
+
+export type MissionProfile = {
+  id: string;
+  name: string;
+  description: string;
+  emissionMode: EmissionMode;
+  passiveOnly: boolean;
+  supportsNight: boolean;
+  supportsWater: boolean;
+  supportsEmcon: boolean;
+};
+
+export type SensorPolicy = {
+  passiveOnly: boolean;
+  allowVisible: boolean;
+  allowThermal: boolean;
+  terminalHandoffRange: number;
+  terminalCommitRange: number;
+  reacquireRange: number;
+  activeAssistanceEnabled: boolean;
 };
 
 export type SafetyStatus = {
   abort: boolean;
   hold: boolean;
+  breakaway: boolean;
   reasons: string[];
 };
 
@@ -71,6 +202,88 @@ export type SimMetrics = {
   alignmentError: number;
   dropoutCount: number;
   visibleTime: number;
+  sensorDisagreement: number;
+  activeSensorCount: number;
+  trackRange: number;
+  commandMagnitude: number;
+};
+
+export type UploadedAutonomyManifest = {
+  controllerName: string | null;
+  controllerSource: string | null;
+  missionName: string | null;
+  missionJson: string | null;
+  uploadedAt: number | null;
+};
+
+export type AutonomyMissionSample = {
+  time: number;
+  positionDelta?: Vec3;
+  rotationDelta?: Euler3;
+  note?: string;
+};
+
+export type AutonomyControllerOutput = {
+  positionDelta?: Vec3;
+  rotationDelta?: Euler3;
+  label?: string;
+};
+
+export type AutonomyFrameInput = {
+  frame: number;
+  simTime: number;
+  controllerState: ControllerState;
+  receiverPose: Pose;
+  targetPose: Pose;
+  tracker: TrackerState;
+  metrics: SimMetrics;
+  missionSample: AutonomyMissionSample | null;
+  previousOutput: AutonomyControllerOutput | null;
+};
+
+export type AutonomyAnalyticsPoint = {
+  simTime: number;
+  baselinePositionError: number;
+  uploadedPositionError: number;
+  baselineLateralError: number;
+  uploadedLateralError: number;
+  baselineForwardError: number;
+  uploadedForwardError: number;
+  baselineVerticalOffset: number;
+  uploadedVerticalOffset: number;
+  baselineConfidence: number;
+  uploadedConfidence: number;
+  receiverDistanceOffset: number;
+};
+
+export type AutonomyAnalyticsSummary = {
+  success: boolean;
+  outcomeLabel: string;
+  timeToDock: number | null;
+  meanDistanceOffset: number;
+  p95DistanceOffset: number;
+  meanLateralOffset: number;
+  p95LateralOffset: number;
+  meanVerticalOffset: number;
+  p95VerticalOffset: number;
+  meanForwardOffset: number;
+  p95ForwardOffset: number;
+  missDistance: number;
+  meanClosureRate: number;
+  maxClosureRate: number;
+  timeInEnvelope: number;
+  averageConfidence: number;
+  dropoutRate: number;
+  safetyEventCount: number;
+  oscillationScore: number;
+};
+
+export type AutonomyAnalyticsReport = {
+  manifest: UploadedAutonomyManifest | null;
+  generatedAt: number;
+  notes: string[];
+  summary: AutonomyAnalyticsSummary;
+  points: AutonomyAnalyticsPoint[];
 };
 
 export type MotionProfile = {
@@ -91,13 +304,20 @@ export type PerceptionProfile = {
 export type ControllerProfile = {
   alignTolerance: number;
   insertTolerance: number;
-  dockTolerance: number;
+  mateTolerance: number;
   standbyExtend: number;
+  searchAmplitude: Vec3;
+  closureGain: number;
+  maxBodyStep: number;
 };
 
 export type SafetyProfile = {
   keepOutRadius: number;
   nearTargetDistance: number;
+  maxClosureRate: number;
+  sensorDisagreementAbort: number;
+  sensorDisagreementHold: number;
+  receiverMotionSpike: number;
 };
 
 export type ScenarioPreset = {
@@ -106,6 +326,9 @@ export type ScenarioPreset = {
   description: string;
   receiverBasePose: Pose;
   motion: MotionProfile;
+  environment: EnvironmentProfile;
+  mission: MissionProfile;
+  sensorPolicy: SensorPolicy;
   perception: PerceptionProfile;
   controller: ControllerProfile;
   safety: SafetyProfile;
@@ -124,8 +347,10 @@ export type LiveSimState = {
   receiverPose: Pose;
   targetPose: Pose;
   boom: BoomJointState;
+  autopilotCommand: AutopilotCommandECEF;
   command: BoomCommand;
   controllerState: ControllerState;
+  sensorObservations: SensorObservation[];
   estimate: PerceptionEstimate;
   tracker: TrackerState;
   safety: SafetyStatus;
@@ -135,4 +360,10 @@ export type LiveSimState = {
 
 export type ReplaySample = LiveSimState & {
   recordedAt: number;
+};
+
+export type AutonomyEvaluationBundle = {
+  baselineReplaySamples: ReplaySample[];
+  uploadedReplaySamples: ReplaySample[];
+  report: AutonomyAnalyticsReport;
 };

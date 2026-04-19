@@ -62,8 +62,8 @@ export function LandingHeroCopyReveal() {
 
         <EnterLine show={unveiled} reduced={reduced} delayMs={300} className="mx-auto mt-5 max-w-lg">
           <p className="font-sans text-sm leading-relaxed text-landing-muted sm:text-base">
-            A browser refueling boom simulator: fly the rig, watch the synthetic camera, and replay runs — same build as
-            the full sim.
+            A browser refueling boom simulator: passive visible / thermal sensing, ECEF boom commands, and replayable
+            mission profiles for day, night, water, land, and EMCON.
           </p>
         </EnterLine>
 
@@ -89,29 +89,9 @@ export function LandingHeroCopyReveal() {
         </EnterLine>
 
         <EnterLine show={unveiled} reduced={reduced} delayMs={510} className="mt-14">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-landing-muted">Scroll</p>
+          <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-landing-muted">Scroll</p>
         </EnterLine>
       </div>
-
-      <EnterLine
-        show={unveiled}
-        reduced={reduced}
-        delayMs={590}
-        className="pointer-events-auto border-t border-white/[0.06] bg-black/40 px-5 py-5 backdrop-blur-sm sm:px-8"
-      >
-        <div className="mx-auto max-w-6xl">
-          <div className="relative border border-landing-line bg-landing-panel/90 p-4 shadow-hud sm:p-5">
-            <div className="absolute left-3 top-3 h-4 w-4 border-l-2 border-t-2 border-accent/70" />
-            <div className="absolute right-3 top-3 h-4 w-4 border-r-2 border-t-2 border-accent/70" />
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-landing-muted">What you get</p>
-            <ul className="mt-3 grid gap-0 divide-y divide-landing-line text-left text-sm text-landing-fg/90 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <li className="py-2.5 sm:py-2 sm:pr-4">Full 3D boom + receiver with orbit camera</li>
-              <li className="py-2.5 sm:px-4 sm:py-2">Synthetic camera feed and geometry-based tracking</li>
-              <li className="py-2.5 sm:pl-4 sm:py-2">Safety checks, metrics, replay, optional cloud save</li>
-            </ul>
-          </div>
-        </div>
-      </EnterLine>
     </div>
   );
 }

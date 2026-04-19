@@ -1,32 +1,27 @@
-import * as THREE from "three";
-
+import { getReceiverReceptacleWorld, getTankerPose } from "@/lib/sim/aircraftAttachments";
+import { applyAutopilotCommand, toAutopilotCommandECEF } from "@/lib/sim/autopilot";
 import {
-  BOOM_BASE_POSITION,
   EMPTY_METRICS,
   EMPTY_SAFETY,
   EMPTY_TRACKER,
   INITIAL_BOOM_STATE,
-  RECEIVER_RECEPTACLE_LOCAL,
+  SENSOR_RIGS,
 } from "@/lib/sim/constants";
 import { updateController } from "@/lib/sim/controller";
-import { applyIncrementCommand, getBoomTipPose } from "@/lib/sim/kinematics";
-import { worldFromLocalOffset } from "@/lib/sim/math";
+import { getBoomTipPose } from "@/lib/sim/kinematics";
 import { computeMetrics } from "@/lib/sim/metrics";
 import { sampleReceiverPose } from "@/lib/sim/motion";
-import { runGeometryPerception } from "@/lib/sim/perception";
+import { runPassivePerception } from "@/lib/sim/perception";
 import { evaluateSafety } from "@/lib/sim/safety";
 import { getScenarioById } from "@/lib/sim/scenarios";
 import { updateTracker } from "@/lib/sim/tracker";
-import type {
-  BoomJointState,
-  ControllerState,
-  ScenarioPreset,
-  SimMetrics,
-} from "@/lib/sim/types";
+import type { ControllerState, ScenarioPreset, SimMetrics } from "@/lib/sim/types";
 
-type HeadlessSensorRig = {
-  camera: THREE.PerspectiveCamera;
-  update: (boom: BoomJointState) => void;
+type StateFrameCounts = Partial<Record<ControllerState, number>>;
+
+type PreferredRoleFrameCounts = {
+  acquire: number;
+  terminal: number;
 };
 
 export type HeadlessRunOptions = {
@@ -35,6 +30,7 @@ export type HeadlessRunOptions = {
   durationSeconds?: number;
   dt?: number;
   stopOnDocked?: boolean;
+  manualAbortAt?: number | null;
 };
 
 export type HeadlessRunSummary = {
@@ -50,33 +46,14 @@ export type HeadlessRunSummary = {
   dropoutCount: number;
   finalMetrics: SimMetrics;
   finalTrackerConfidence: number;
+  stateFrameCounts: StateFrameCounts;
+  firstStateAt: StateFrameCounts;
+  preferredRoleFrameCounts: PreferredRoleFrameCounts;
+  peakPositionError: number;
+  peakLateralError: number;
+  maxSensorDisagreement: number;
+  dropoutRate: number;
 };
-
-function createHeadlessSensorRig(): HeadlessSensorRig {
-  const root = new THREE.Object3D();
-  root.position.set(BOOM_BASE_POSITION.x, BOOM_BASE_POSITION.y, BOOM_BASE_POSITION.z);
-
-  const yawNode = new THREE.Object3D();
-  const pitchNode = new THREE.Object3D();
-  const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 40);
-  camera.rotation.set(0, Math.PI, 0);
-  camera.updateProjectionMatrix();
-
-  root.add(yawNode);
-  yawNode.add(pitchNode);
-  pitchNode.add(camera);
-
-  return {
-    camera,
-    update(boom) {
-      yawNode.rotation.y = boom.yaw;
-      pitchNode.rotation.x = boom.pitch;
-      camera.position.set(0, 0.08, Math.max(boom.extend - 0.4, 0.8));
-      root.updateMatrixWorld(true);
-      camera.updateWorldMatrix(true, false);
-    },
-  };
-}
 
 export function runHeadlessScenario({
   scenarioId = "steady-approach",
@@ -84,9 +61,9 @@ export function runHeadlessScenario({
   durationSeconds = 20,
   dt = 1 / 60,
   stopOnDocked = false,
+  manualAbortAt = null,
 }: HeadlessRunOptions = {}): HeadlessRunSummary {
   const scenario = inputScenario ?? getScenarioById(scenarioId);
-  const rig = createHeadlessSensorRig();
   const totalFrames = Math.ceil(durationSeconds / dt);
 
   let boom = { ...INITIAL_BOOM_STATE };
@@ -99,39 +76,60 @@ export function runHeadlessScenario({
   let visibleFrames = 0;
   let dropoutCount = 0;
   let framesSimulated = 0;
+  let previousReceiverPose = sampleReceiverPose(0, scenario);
+  const stateFrameCounts: StateFrameCounts = {};
+  const firstStateAt: StateFrameCounts = {};
+  const preferredRoleFrameCounts: PreferredRoleFrameCounts = {
+    acquire: 0,
+    terminal: 0,
+  };
+  let peakPositionError = 0;
+  let peakLateralError = 0;
+  let maxSensorDisagreement = 0;
 
   for (let frame = 0; frame < totalFrames; frame += 1) {
     framesSimulated = frame + 1;
     const simTime = framesSimulated * dt;
     const receiverPose = sampleReceiverPose(simTime, scenario);
-    const targetPosition = worldFromLocalOffset(
-      receiverPose.position,
-      receiverPose.rotation,
-      RECEIVER_RECEPTACLE_LOCAL,
-    );
-
-    rig.update(boom);
-    const estimate = runGeometryPerception({
-      camera: rig.camera,
-      targetWorld: targetPosition,
+    const targetPose = {
+      position: getReceiverReceptacleWorld(receiverPose),
+      rotation: receiverPose.rotation,
+    };
+    const perception = runPassivePerception({
+      boom,
+      targetPose,
       scenario,
       simTime,
     });
 
-    if (estimate.visible) {
+    if (perception.estimate.visible) {
       visibleFrames += 1;
     }
-    if (estimate.dropout) {
-      dropoutCount += 1;
-    }
+    dropoutCount += perception.observations.filter((observation) => observation.dropout).length;
+    preferredRoleFrameCounts[perception.preferredRole] += 1;
 
-    tracker = updateTracker(tracker, estimate, dt);
+    tracker = updateTracker(tracker, perception.observations, dt);
 
     const boomTipBefore = getBoomTipPose(boom).position;
+    const receiverVelocity = {
+      x: (receiverPose.position.x - previousReceiverPose.position.x) / Math.max(dt, 1e-3),
+      y: (receiverPose.position.y - previousReceiverPose.position.y) / Math.max(dt, 1e-3),
+      z: (receiverPose.position.z - previousReceiverPose.position.z) / Math.max(dt, 1e-3),
+    };
     const metricsBefore = computeMetrics({
       boomTip: boomTipBefore,
-      target: targetPosition,
-      estimate,
+      target: targetPose.position,
+      tracker,
+      estimate: perception.estimate,
+      observations: perception.observations,
+      autopilotCommand: {
+        dx: 0,
+        dy: 0,
+        dz: 0,
+        magnitude: 0,
+        clamped: false,
+        mode: "hold",
+      },
       previousMetrics: metrics,
       dt,
     });
@@ -142,68 +140,71 @@ export function runHeadlessScenario({
       boom,
       boomTip: boomTipBefore,
       trackedTarget: tracker,
-      estimate,
+      estimate: perception.estimate,
       safety: EMPTY_SAFETY,
       simTime,
     });
 
-    let safety = evaluateSafety({
+    const safety = evaluateSafety({
       state: controller.state,
       scenario,
       metrics: metricsBefore,
       previousMetrics: metrics,
       boomTip: boomTipBefore,
       receiverPose,
-      trackerConfidence: tracker.confidence,
+      receiverVelocity,
+      tracker,
+      observations: perception.observations,
+      manualAbort: manualAbortAt !== null && simTime >= manualAbortAt,
     });
 
-    if (safety.abort) {
+    if (safety.abort || safety.breakaway || safety.hold) {
       controller = updateController({
-        state: "ABORT",
+        state: controllerState,
         scenario,
         boom,
         boomTip: boomTipBefore,
         trackedTarget: tracker,
-        estimate,
+        estimate: perception.estimate,
         safety,
         simTime,
       });
-    } else if (safety.hold) {
-      controller = {
-        ...controller,
-        command: {
-          ...controller.command,
-          extendRate: Math.min(controller.command.extendRate, 0),
-        },
-      };
     }
 
-    boom = applyIncrementCommand(boom, controller.command, dt);
+    const autopilotCommand = toAutopilotCommandECEF(controller.desiredTipMotion, getTankerPose());
+    const plant = applyAutopilotCommand(boom, autopilotCommand, getTankerPose(), dt);
+    boom = plant.nextBoom;
     const boomTipAfter = getBoomTipPose(boom).position;
     metrics = computeMetrics({
       boomTip: boomTipAfter,
-      target: targetPosition,
-      estimate,
+      target: targetPose.position,
+      tracker,
+      estimate: perception.estimate,
+      observations: perception.observations,
+      autopilotCommand,
       previousMetrics: metrics,
       dt,
     });
 
-    safety = {
-      ...safety,
-      hold: safety.hold || tracker.confidence < 0.25,
-    };
-
     controllerState = controller.state;
+    previousReceiverPose = receiverPose;
     minPositionError = Math.min(minPositionError, metrics.positionError);
+    peakPositionError = Math.max(peakPositionError, metrics.positionError);
+    peakLateralError = Math.max(peakLateralError, metrics.lateralError);
+    maxSensorDisagreement = Math.max(maxSensorDisagreement, metrics.sensorDisagreement);
+    stateFrameCounts[controllerState] = (stateFrameCounts[controllerState] ?? 0) + 1;
+    if (firstStateAt[controllerState] === undefined) {
+      firstStateAt[controllerState] = simTime;
+    }
 
-    if (controllerState === "DOCKED" && dockedAt === null) {
+    if (controllerState === "MATED" && dockedAt === null) {
       dockedAt = simTime;
       if (stopOnDocked) {
         break;
       }
     }
 
-    if (controllerState === "ABORT") {
+    if (controllerState === "ABORT" || controllerState === "BREAKAWAY") {
       abortReason = safety.reasons[0] ?? abortReason;
       break;
     }
@@ -222,5 +223,22 @@ export function runHeadlessScenario({
     dropoutCount,
     finalMetrics: metrics,
     finalTrackerConfidence: tracker.confidence,
+    stateFrameCounts,
+    firstStateAt,
+    preferredRoleFrameCounts,
+    peakPositionError,
+    peakLateralError,
+    maxSensorDisagreement,
+    dropoutRate: dropoutCount / Math.max(framesSimulated * SENSOR_RIGS.length, 1),
   };
+}
+
+export function runMissionMatrix(scenarioIds: string[]) {
+  return scenarioIds.map((scenarioId) =>
+    runHeadlessScenario({
+      scenarioId,
+      durationSeconds: 30,
+      stopOnDocked: true,
+    }),
+  );
 }
