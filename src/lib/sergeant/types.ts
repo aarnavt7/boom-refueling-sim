@@ -144,6 +144,6 @@ export function createSergeantWelcomeMessage() {
     role: "assistant",
     kind: "system",
     content:
-      "Sergeant online. I can explain the sim, the onboarding flow, replay, and what to do next.",
+      "Sergeant online. Ask about the current run, replay, controls, or what to try next.",
   });
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/sim/autonomyCatalog";
 
 const USER_PREFS_KEY = "boom:user-prefs:v1";
+const USER_PREFS_VERSION = 2;
 const RUN_SUMMARIES_KEY = "boom:run-summaries:v1";
 const REPLAY_DB_NAME = "boom-replays:v1";
 const REPLAY_STORE_NAME = "saved-replays";
@@ -129,6 +130,7 @@ function parseUserPrefs(value: unknown): UserPrefs | null {
   }
 
   const {
+    version,
     selectedScenarioId,
     selectedAircraftCardId,
     cameraMode,
@@ -143,6 +145,12 @@ function parseUserPrefs(value: unknown): UserPrefs | null {
     return null;
   }
 
+  const storedVersion = typeof version === "number" ? version : 1;
+  const resolvedCameraMode =
+    cameraMode === "manual" || cameraMode === "receiver-lock" || cameraMode === "dock-lock"
+      ? (cameraMode as CameraMode)
+      : DEFAULT_CAMERA_MODE;
+
   return {
     selectedScenarioId,
     selectedAircraftCardId:
@@ -150,9 +158,9 @@ function parseUserPrefs(value: unknown): UserPrefs | null {
         ? (selectedAircraftCardId as AircraftCardId)
         : DEFAULT_AIRCRAFT_CARD_ID,
     cameraMode:
-      cameraMode === "manual" || cameraMode === "receiver-lock" || cameraMode === "dock-lock"
-        ? (cameraMode as CameraMode)
-        : DEFAULT_CAMERA_MODE,
+      storedVersion < USER_PREFS_VERSION && resolvedCameraMode === "dock-lock"
+        ? "manual"
+        : resolvedCameraMode,
     sensorViewportSource:
       sensorViewportSource === "auto" ||
       sensorViewportSource === "tail-acq-left" ||
@@ -298,7 +306,13 @@ export function loadUserPrefs() {
 
 export function saveUserPrefs(prefs: UserPrefs) {
   const storage = requireLocalStorage();
-  storage.setItem(USER_PREFS_KEY, JSON.stringify(prefs));
+  storage.setItem(
+    USER_PREFS_KEY,
+    JSON.stringify({
+      ...prefs,
+      version: USER_PREFS_VERSION,
+    }),
+  );
 }
 
 export function listRunSummaries() {

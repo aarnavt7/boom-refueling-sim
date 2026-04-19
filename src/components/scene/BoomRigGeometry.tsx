@@ -20,6 +20,8 @@ export function BoomRigGeometry({ yaw, pitch, extend, children }: BoomRigGeometr
   const tipCenter = mainLength + tipLength / 2 - 0.04;
   const finZ = Math.max(mainLength - 1.1, 2.8);
   const stripeZ = mainLength + 0.18;
+  const nozzleConeCenter = Math.max(extend - 0.16, mainLength + 0.54);
+  const nozzleTipCenter = Math.max(extend - 0.065, mainLength + 0.66);
 
   return (
     <>
@@ -172,7 +174,12 @@ export function BoomRigGeometry({ yaw, pitch, extend, children }: BoomRigGeometr
             />
           </mesh>
 
-          <mesh castShadow receiveShadow position={[0, -0.035, mainLength + 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh
+            castShadow
+            receiveShadow
+            position={[0, -0.035, nozzleConeCenter]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
             <coneGeometry args={[0.06, 0.28, 24]} />
             <meshPhysicalMaterial
               color="#eef3f5"
@@ -184,7 +191,7 @@ export function BoomRigGeometry({ yaw, pitch, extend, children }: BoomRigGeometr
             />
           </mesh>
 
-          <mesh castShadow receiveShadow position={[0, -0.035, mainLength + 0.68]}>
+          <mesh castShadow receiveShadow position={[0, -0.035, nozzleTipCenter]}>
             <sphereGeometry args={[0.065, 22, 22]} />
             <meshPhysicalMaterial
               color="#f4fbff"

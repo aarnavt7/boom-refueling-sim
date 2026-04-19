@@ -2,7 +2,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { DebugHelpers } from "@/components/scene/DebugHelpers";
@@ -46,7 +46,7 @@ import {
 } from "@/lib/sim/constants";
 import { applyAutopilotCommand, toAutopilotCommandECEF } from "@/lib/sim/autopilot";
 import { updateController } from "@/lib/sim/controller";
-import { getBoomTipPose } from "@/lib/sim/kinematics";
+import { getBoomTipPose, solveBoomIK } from "@/lib/sim/kinematics";
 import { computeMetrics } from "@/lib/sim/metrics";
 import { sampleReceiverPose } from "@/lib/sim/motion";
 import { runPassivePerception } from "@/lib/sim/perception";
@@ -104,6 +104,7 @@ function SimulationWorld({
   const lastSensorRenderKeyRef = useRef<string | null>(null);
   const allowOrbitControls = useOnboardingStore((state) => state.allowOrbitControls);
   const cameraMode = useUiStore((state) => state.cameraMode);
+  const setCameraMode = useUiStore((state) => state.setCameraMode);
   const replayMode = useUiStore((state) => state.replayMode);
   const replayDataSource = useUiStore((state) => state.replayDataSource);
   const evaluationView = useUiStore((state) => state.evaluationView);
@@ -134,6 +135,15 @@ function SimulationWorld({
           autonomyEvaluation.uploadedReplaySamples.length,
         )
       : replaySamples.length;
+  const handleOrbitStart = useCallback(() => {
+    if (simVariant !== "sim" || !allowOrbitControls) {
+      return;
+    }
+
+    if (useUiStore.getState().cameraMode !== "manual") {
+      setCameraMode("manual");
+    }
+  }, [allowOrbitControls, setCameraMode, simVariant]);
 
   useFrame((_, delta) => {
     if (simVariant === "landing" && isCaptureSimDriverActive()) {
@@ -279,7 +289,10 @@ function SimulationWorld({
 
     const autopilotCommand = toAutopilotCommandECEF(controller.desiredTipMotion, getTankerPose());
     const plant = applyAutopilotCommand(previous.boom, autopilotCommand, getTankerPose(), dt);
-    const nextBoom = plant.nextBoom;
+    const nextBoom =
+      controller.state === "MATED"
+        ? solveBoomIK(targetPosition)
+        : plant.nextBoom;
     const boomTipAfter = getBoomTipPose(nextBoom).position;
     const metrics = computeMetrics({
       boomTip: boomTipAfter,
@@ -352,12 +365,19 @@ function SimulationWorld({
       ) : (
         <>
           <OrbitControls
-            enabled={allowOrbitControls && cameraMode === "manual"}
+            enabled={allowOrbitControls}
             makeDefault
+            enableDamping
+            dampingFactor={0.08}
+            screenSpacePanning
             target={[MAIN_CAMERA_TARGET.x, MAIN_CAMERA_TARGET.y, MAIN_CAMERA_TARGET.z]}
             minDistance={9}
-            maxDistance={38}
-            maxPolarAngle={Math.PI * 0.46}
+            maxDistance={52}
+            maxPolarAngle={Math.PI * 0.85}
+            rotateSpeed={0.72}
+            panSpeed={0.82}
+            zoomSpeed={0.86}
+            onStart={handleOrbitStart}
           />
           <TrackingCameraRig />
           <GamepadCameraRig />

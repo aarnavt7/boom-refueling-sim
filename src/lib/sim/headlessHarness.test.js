@@ -120,6 +120,21 @@ describe("headless safety and negative cases", () => {
   });
 });
 
+describe("headless docking lock", () => {
+  test("once mated, the boom stays locked to the receptacle instead of drifting off target", () => {
+    const result = runHeadlessScenario({
+      scenarioId: "steady-approach",
+      durationSeconds: 14,
+      dt: DT,
+      stopOnDocked: false,
+    });
+
+    expect(result.dockedAt).not.toBeNull();
+    expect(result.finalState).toBe("MATED");
+    expect(result.finalMetrics.positionError).toBeLessThan(0.02);
+  });
+});
+
 describe("headless autonomy perturbations", () => {
   test("uploaded motion perturbations create a measurably different yet deterministic replay", () => {
     const baseline = runHeadlessScenario({

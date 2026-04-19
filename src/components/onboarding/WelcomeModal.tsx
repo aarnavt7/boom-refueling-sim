@@ -47,9 +47,9 @@ const SETUP_STEPS: Array<{
   {
     id: "camera",
     label: "Camera",
-    title: "Choose the tracking view",
+    title: "Choose the scene camera",
     detail:
-      "Pick the chase view you want for the run.",
+      "Manual orbit is the default so you can drag around the formation right away.",
   },
   {
     id: "autonomy",
@@ -226,13 +226,8 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
               <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
                 Aircraft card
               </p>
-              <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-                Presentation-first for now. Every option still normalizes to the same live tanker and receiver.
-              </p>
-            </div>
-            <span className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[10px] text-[color:var(--hud-muted)]">
-              Visual preset
-            </span>
+           </div>
+
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {AIRCRAFT_CARD_OPTIONS.map((option) => {
@@ -509,7 +504,6 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
               </p>
               {!isLastStep ? (
                 <p className="max-w-[34rem] font-sans text-[12px] leading-relaxed text-[color:var(--hud-accent-fg)]">
-                  This screen only shows this one setup choice.
                 </p>
               ) : null}
             </div>

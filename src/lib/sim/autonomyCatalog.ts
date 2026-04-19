@@ -45,7 +45,7 @@ export const CAMERA_MODE_OPTIONS: Array<{
   {
     id: "manual",
     label: "Manual",
-    detail: "Orbit freely and inspect the full formation.",
+    detail: "Free orbit. Drag to rotate, scroll to zoom, and inspect the full formation.",
   },
   {
     id: "receiver-lock",
@@ -60,7 +60,7 @@ export const CAMERA_MODE_OPTIONS: Array<{
 ];
 
 export const DEFAULT_AIRCRAFT_CARD_ID: AircraftCardId = "kc46_f15";
-export const DEFAULT_CAMERA_MODE: CameraMode = "dock-lock";
+export const DEFAULT_CAMERA_MODE: CameraMode = "manual";
 
 export const SAMPLE_CONTROLLER_SOURCE = `export function step(input) {
   const phase = input.simTime;

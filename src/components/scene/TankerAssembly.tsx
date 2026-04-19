@@ -18,6 +18,7 @@ type TankerAssemblyProps = {
 
 function BoomMountFairing() {
   const fairing = TANKER_ATTACHMENT_CONFIG.boomFairing;
+  const braceHalfWidth = fairing.shroudScale.x * 0.18;
 
   return (
     <group>
@@ -34,21 +35,20 @@ function BoomMountFairing() {
           fairing.shroudRotation.y,
           fairing.shroudRotation.z,
         ]}
+        scale={[
+          fairing.shroudScale.x,
+          fairing.shroudScale.y,
+          fairing.shroudScale.z,
+        ]}
       >
-        <boxGeometry
-          args={[
-            fairing.shroudScale.x,
-            fairing.shroudScale.y,
-            fairing.shroudScale.z,
-          ]}
-        />
+        <sphereGeometry args={[0.5, 30, 24]} />
         <meshPhysicalMaterial
-          color="#788290"
-          metalness={0.26}
-          roughness={0.38}
-          clearcoat={0.26}
-          clearcoatRoughness={0.18}
-          envMapIntensity={0.94}
+          color="#7d8896"
+          metalness={0.32}
+          roughness={0.34}
+          clearcoat={0.3}
+          clearcoatRoughness={0.14}
+          envMapIntensity={0.96}
         />
       </mesh>
 
@@ -66,20 +66,77 @@ function BoomMountFairing() {
           fairing.braceRotation.z,
         ]}
       >
-        <boxGeometry
+        <capsuleGeometry
           args={[
             fairing.braceScale.x,
-            fairing.braceScale.y,
-            fairing.braceScale.z,
+            Math.max(fairing.braceScale.y - fairing.braceScale.x * 2, 0.12),
+            10,
+            18,
           ]}
         />
         <meshPhysicalMaterial
-          color="#5f6974"
-          metalness={0.54}
-          roughness={0.28}
-          clearcoat={0.1}
+          color="#66727d"
+          metalness={0.48}
+          roughness={0.3}
+          clearcoat={0.12}
           clearcoatRoughness={0.12}
           envMapIntensity={0.88}
+        />
+      </mesh>
+
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          castShadow
+          receiveShadow
+          position={[
+            fairing.bracePosition.x + braceHalfWidth * side,
+            fairing.bracePosition.y + 0.02,
+            fairing.bracePosition.z - 0.05,
+          ]}
+          rotation={[
+            fairing.braceRotation.x - 0.08,
+            0,
+            side * 0.22,
+          ]}
+        >
+          <boxGeometry
+            args={[
+              fairing.braceScale.z,
+              fairing.braceScale.y * 0.88,
+              fairing.braceScale.x * 1.8,
+            ]}
+          />
+          <meshPhysicalMaterial
+            color="#5d6771"
+            metalness={0.42}
+            roughness={0.34}
+            clearcoat={0.08}
+            clearcoatRoughness={0.16}
+            envMapIntensity={0.76}
+          />
+        </mesh>
+      ))}
+
+      <mesh
+        castShadow
+        receiveShadow
+        position={[
+          fairing.collarPosition.x,
+          fairing.collarPosition.y + 0.09,
+          fairing.collarPosition.z - 0.18,
+        ]}
+        rotation={[0.16, 0, 0]}
+        scale={[1.02, 0.56, 1.18]}
+      >
+        <sphereGeometry args={[0.32, 28, 20]} />
+        <meshPhysicalMaterial
+          color="#5e6975"
+          metalness={0.36}
+          roughness={0.34}
+          clearcoat={0.16}
+          clearcoatRoughness={0.14}
+          envMapIntensity={0.86}
         />
       </mesh>
 
@@ -112,6 +169,27 @@ function BoomMountFairing() {
           clearcoat={0.18}
           clearcoatRoughness={0.1}
           envMapIntensity={1.12}
+        />
+      </mesh>
+
+      <mesh
+        castShadow
+        receiveShadow
+        position={[
+          fairing.collarPosition.x,
+          fairing.collarPosition.y + 0.03,
+          fairing.collarPosition.z + 0.08,
+        ]}
+        rotation={[0.08, 0, 0]}
+      >
+        <cylinderGeometry args={[0.1, 0.15, 0.34, 22]} />
+        <meshPhysicalMaterial
+          color="#d3dae1"
+          metalness={0.68}
+          roughness={0.18}
+          clearcoat={0.24}
+          clearcoatRoughness={0.1}
+          envMapIntensity={1}
         />
       </mesh>
     </group>

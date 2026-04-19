@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { FloatingHudPanel } from "@/components/hud/FloatingHudPanel";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
 import { useOnboardingPresentation } from "@/lib/onboarding/useOnboardingPresentation";
 import { buildSergeantContextSnapshot } from "@/lib/sergeant/context";
@@ -71,15 +72,15 @@ function normalizeHints(hints: SergeantSystemHint[] | undefined) {
 function getDefaultPromptSuggestions(hasCompletedOrientationTour: boolean) {
   if (!hasCompletedOrientationTour) {
     return [
-      "What am I looking at right now?",
-      "What does the guidance panel mean?",
+      "What am I looking at?",
+      "How do I move around the scene?",
       "What should I do next?",
     ];
   }
 
   return [
     "What state is the controller in?",
-    "How do replay and save-run work?",
+    "How does replay work?",
     "What should I watch first?",
   ];
 }
@@ -107,7 +108,6 @@ export function SergeantAssistant() {
   const startGuidedRun = useOnboardingStore((state) => state.startGuidedRun);
   const resumeGuidedRun = useOnboardingStore((state) => state.resumeGuidedRun);
   const skipOnboarding = useOnboardingStore((state) => state.skipOnboarding);
-  const openOnboardingPanel = useOnboardingStore((state) => state.openPanel);
   const closeOnboardingPanel = useOnboardingStore((state) => state.closePanel);
 
   const scenario = useSimStore((state) => state.scenario);
@@ -116,7 +116,6 @@ export function SergeantAssistant() {
   const persistStatus = useSimStore((state) => state.persistStatus);
   const persistMessage = useSimStore((state) => state.persistMessage);
 
-  const selectedScenarioId = useUiStore((state) => state.selectedScenarioId);
   const selectedAircraftCardId = useUiStore((state) => state.selectedAircraftCardId);
   const cameraMode = useUiStore((state) => state.cameraMode);
   const liveRunState = useUiStore((state) => state.liveRunState);
@@ -150,7 +149,7 @@ export function SergeantAssistant() {
   const [responseHints, setResponseHints] = useState<SergeantSystemHint[]>([]);
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const displayedState = useMemo(
     () => getDisplayedState(live, replaySamples, replayMode, replayIndex),
@@ -231,8 +230,8 @@ export function SergeantAssistant() {
     ],
   );
 
-  const quickActions = useMemo(() => {
-    const actions: QuickAction[] = [];
+  const actionOptions = useMemo(() => {
+    const options = new Map<string, QuickAction>();
 
     if (
       pausedOnboardingContext &&
@@ -241,38 +240,34 @@ export function SergeantAssistant() {
         onboardingStatus === "guided-run" ||
         onboardingStatus === "replay-debrief")
     ) {
-      actions.push({
+      options.set("resume-onboarding", {
         id: "resume-onboarding",
-        label: "Resume onboarding",
+        label: "Resume walkthrough",
       });
     } else if (!hasCompletedOrientationTour) {
-      actions.push({
+      options.set("start-quick-tour", {
         id: "start-quick-tour",
-        label: "Start quick tour",
+        label: "Quick tour",
       });
     } else if (!hasCompletedGuidedRun || !hasCompletedReplayDebrief) {
-      actions.push({
+      options.set("start-mission-walkthrough", {
         id: "start-mission-walkthrough",
-        label: "Start mission walkthrough",
+        label: "Mission walkthrough",
       });
     }
 
-    const deduped = new Map<string, QuickAction>();
-    for (const action of actions) {
-      deduped.set(action.id, action);
-    }
     for (const hint of responseHints) {
       if (!hint.action) {
         continue;
       }
 
-      deduped.set(hint.action, {
+      options.set(hint.action, {
         id: hint.action,
         label: hint.label,
       });
     }
 
-    return [...deduped.values()];
+    return [...options.values()].slice(0, 2);
   }, [
     hasCompletedGuidedRun,
     hasCompletedOrientationTour,
@@ -283,10 +278,15 @@ export function SergeantAssistant() {
     responseHints,
   ]);
 
-  const activePromptSuggestions =
-    suggestedPrompts.length > 0
-      ? suggestedPrompts
-      : getDefaultPromptSuggestions(hasCompletedOrientationTour);
+  const promptOptions = useMemo(
+    () =>
+      (
+        suggestedPrompts.length > 0
+          ? suggestedPrompts
+          : getDefaultPromptSuggestions(hasCompletedOrientationTour)
+      ).slice(0, 3),
+    [hasCompletedOrientationTour, suggestedPrompts],
+  );
 
   useEffect(() => {
     hydrateFromStorage();
@@ -319,11 +319,17 @@ export function SergeantAssistant() {
   ]);
 
   useEffect(() => {
-    if (isAssistantOpen) {
-      window.setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 40);
+    if (!isAssistantOpen) {
+      return;
     }
+
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 40);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [isAssistantOpen]);
 
   useEffect(() => {
@@ -336,7 +342,7 @@ export function SergeantAssistant() {
       top: node.scrollHeight,
       behavior: prefersReducedMotion ? "auto" : "smooth",
     });
-  }, [messages, prefersReducedMotion, responseHints, suggestedPrompts]);
+  }, [isAssistantOpen, messages, prefersReducedMotion]);
 
   useEffect(() => {
     if (
@@ -349,6 +355,24 @@ export function SergeantAssistant() {
       setPausedOnboardingContext(null);
     }
   }, [onboardingDismissed, onboardingStatus, pausedOnboardingContext, setPausedOnboardingContext]);
+
+  useEffect(() => {
+    if (!isAssistantOpen) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeAssistant();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeAssistant, isAssistantOpen]);
 
   function openSergeantFromUi(shouldPauseOnboarding: boolean) {
     closeOnboardingPanel();
@@ -371,10 +395,6 @@ export function SergeantAssistant() {
 
   function handleLauncherClick() {
     openSergeantFromUi(isTourActive || isMissionActive);
-  }
-
-  function handleClose() {
-    closeAssistant();
   }
 
   function triggerQuickAction(action: SergeantQuickActionId) {
@@ -465,191 +485,161 @@ export function SergeantAssistant() {
     return null;
   }
 
-  const drawerShellClass = isCompact
-    ? "pointer-events-auto fixed inset-x-2 bottom-2 top-20 z-[60]"
-    : "pointer-events-auto fixed bottom-3 right-3 top-3 z-[60] w-[min(27rem,calc(100vw-1.5rem))]";
+  const mobilePanelShellClass =
+    "pointer-events-auto fixed inset-x-2 bottom-2 z-[60] max-h-[min(32rem,calc(100vh-5rem))]";
   const showLauncher = !isAssistantOpen && !isWelcomeOpen && !isPanelVisible;
+  const launcherHasAttention = hasUnreadSystemHint || pausedOnboardingContext !== null;
+
+  function renderAssistantPanel(panelClassName: string, panelDragHandle?: ReactNode) {
+    return (
+      <TacticalPanel
+        title="Sergeant"
+        subtitle={`${currentContextSnapshot.run.controllerLabel} · ${scenario.name}`}
+        className={panelClassName}
+        bodyClassName="flex h-full min-h-0 flex-col"
+        panelDragHandle={panelDragHandle}
+        headerRight={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)] transition hover:text-[color:var(--hud-accent-fg)]"
+              onClick={() => {
+                setResponseHints([]);
+                setSuggestedPrompts([]);
+                clearConversation();
+              }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)] transition hover:text-[color:var(--hud-accent-fg)]"
+              onClick={closeAssistant}
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        <div className="border-b border-[color:var(--hud-line)] px-3 py-3">
+          <p className="font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+            Ask about the current state, replay, controls, or what to do next.
+          </p>
+          {actionOptions.length > 0 || promptOptions.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {actionOptions.map((action) => (
+                <HudButton
+                  key={action.id}
+                  variant="ghost"
+                  onClick={() => triggerQuickAction(action.id)}
+                >
+                  {action.label}
+                </HudButton>
+              ))}
+              {promptOptions.map((prompt) => (
+                <HudButton
+                  key={prompt}
+                  variant="ghost"
+                  onClick={() => void sendMessage(prompt)}
+                >
+                  {prompt}
+                </HudButton>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div
+          ref={messageListRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+        >
+          {messages.map((message) => {
+            const tone = getMessageTone(message);
+
+            return (
+              <article
+                key={message.id}
+                className={`max-w-[92%] rounded-[16px] border px-3 py-2 ${
+                  tone === "user"
+                    ? "ml-auto border-[color:var(--hud-accent)]/35 bg-[color:var(--hud-accent)]/10"
+                    : tone === "system"
+                      ? "w-full max-w-full border-[color:var(--hud-line)] bg-black/20"
+                      : "border-[color:var(--hud-line)] bg-black/15"
+                }`}
+              >
+                <p className="font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--hud-muted)]">
+                  {tone === "user"
+                    ? "You"
+                    : tone === "system"
+                      ? "System"
+                      : "Sergeant"}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-[color:var(--hud-fg)]">
+                  {message.content}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+
+        <form
+          className="border-t border-[color:var(--hud-line)] px-3 py-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendMessage();
+          }}
+        >
+          <label className="sr-only" htmlFor="sergeant-input">
+            Ask Sergeant
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="sergeant-input"
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Ask about the sim or current state."
+              className="min-w-0 flex-1 rounded-[14px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-2 font-sans text-[13px] leading-relaxed text-[color:var(--hud-fg)] outline-none transition placeholder:text-[color:var(--hud-muted)] focus:border-[color:var(--hud-accent)]/45"
+            />
+            <HudButton
+              type="submit"
+              variant="primary"
+              disabled={status === "sending" || draft.trim().length === 0}
+            >
+              Send
+            </HudButton>
+          </div>
+          <p className="mt-2 font-sans text-[11px] text-[color:var(--hud-muted)]">
+            {status === "sending"
+              ? "Thinking through the current sim state."
+              : status === "error"
+                ? "Local reply channel unavailable. Try again."
+                : "Read-only helper grounded in the current sim and replay state."}
+          </p>
+        </form>
+      </TacticalPanel>
+    );
+  }
 
   return (
     <>
       {isAssistantOpen ? (
         <>
-          <button
-            type="button"
-            aria-label="Close Sergeant"
-            className="pointer-events-auto fixed inset-0 z-[55] bg-black/20 backdrop-blur-[2px]"
-            onClick={handleClose}
-          />
-          <div className={drawerShellClass}>
-            <TacticalPanel
-              title="Sergeant"
-              subtitle={`${scenario.name} · ${currentContextSnapshot.run.controllerLabel}`}
-              className="h-full rounded-[24px] shadow-[0_24px_72px_rgba(0,0,0,0.52)]"
-              bodyClassName="flex h-full min-h-0 flex-col"
-              headerRight={
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-[color:var(--hud-accent)]/45 px-2 py-0.5 font-sans text-[10px] font-medium tracking-[0.03em] text-[color:var(--hud-accent-fg)]">
-                    Local guidance
-                  </span>
-                  <button
-                    type="button"
-                    className="font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)] transition hover:text-[color:var(--hud-accent-fg)]"
-                    onClick={handleClose}
-                  >
-                    Close
-                  </button>
-                </div>
-              }
-            >
-              <div className="border-b border-[color:var(--hud-line)] px-3 py-3">
-                <p className="font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-                  Need a guided read? I stay grounded in the current sim, onboarding, replay, and save state.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {quickActions.map((action) => (
-                    <HudButton
-                      key={action.id}
-                      variant="ghost"
-                      onClick={() => triggerQuickAction(action.id)}
-                    >
-                      {action.label}
-                    </HudButton>
-                  ))}
-                  {!isMissionActive && !isTourActive ? (
-                    <HudButton
-                      variant="ghost"
-                      onClick={() => {
-                        closeAssistant();
-                        openOnboardingPanel();
-                      }}
-                    >
-                      Open checklist
-                    </HudButton>
-                  ) : null}
-                  <HudButton
-                    variant="ghost"
-                    onClick={() => {
-                      setResponseHints([]);
-                      setSuggestedPrompts([]);
-                      clearConversation();
-                    }}
-                  >
-                    Clear chat
-                  </HudButton>
-                </div>
-              </div>
-
-              <div
-                ref={messageListRef}
-                className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
-              >
-                {messages.map((message) => {
-                  const tone = getMessageTone(message);
-
-                  return (
-                    <article
-                      key={message.id}
-                      className={`max-w-[92%] rounded-[18px] border px-3 py-2 ${
-                        tone === "user"
-                          ? "ml-auto border-[color:var(--hud-accent)]/35 bg-[color:var(--hud-accent)]/10"
-                          : tone === "system"
-                            ? "w-full max-w-full border-[color:var(--hud-line)] bg-black/20"
-                            : "border-[color:var(--hud-line)] bg-black/15"
-                      }`}
-                    >
-                      <p className="font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--hud-muted)]">
-                        {tone === "user"
-                          ? "You"
-                          : tone === "system"
-                            ? "System"
-                            : "Sergeant"}
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-[color:var(--hud-fg)]">
-                        {message.content}
-                      </p>
-                    </article>
-                  );
-                })}
-              </div>
-
-              {activePromptSuggestions.length > 0 ? (
-                <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
-                  <p className="font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--hud-muted)]">
-                    Suggested prompts
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {activePromptSuggestions.slice(0, 3).map((prompt) => (
-                      <HudButton key={prompt} variant="ghost" onClick={() => void sendMessage(prompt)}>
-                        {prompt}
-                      </HudButton>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
-                <label className="sr-only" htmlFor="sergeant-input">
-                  Ask Sergeant
-                </label>
-                <textarea
-                  id="sergeant-input"
-                  ref={textareaRef}
-                  value={draft}
-                  rows={3}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void sendMessage();
-                    }
-                  }}
-                  placeholder="Ask what the current state means, what a panel does, or what to do next."
-                  className="w-full resize-none rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-2 font-sans text-[13px] leading-relaxed text-[color:var(--hud-fg)] outline-none transition placeholder:text-[color:var(--hud-muted)] focus:border-[color:var(--hud-accent)]/45"
-                />
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">
-                    {status === "sending"
-                      ? "Sergeant is shaping a grounded reply."
-                      : "Phase 1 is read-only. Direct sim execution lands next."}
-                  </p>
-                  <HudButton
-                    variant="primary"
-                    disabled={status === "sending" || draft.trim().length === 0}
-                    onClick={() => void sendMessage()}
-                  >
-                    Send
-                  </HudButton>
-                </div>
-              </div>
-
-              <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--hud-muted)]">
-                    Operations rail
-                  </p>
-                  <span className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[10px] text-[color:var(--hud-muted)]">
-                    Phase 2 ready
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1">
-                  {[
-                    "Interpret request",
-                    "Map preset and modifiers",
-                    "Reset sim",
-                    "Start run",
-                    "Monitor replay and results",
-                  ].map((step) => (
-                    <div
-                      key={step}
-                      className="rounded-[14px] border border-[color:var(--hud-line)] bg-black/10 px-3 py-2 font-sans text-[11px] text-[color:var(--hud-muted)]"
-                    >
-                      {step}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </TacticalPanel>
+          <div className={`${mobilePanelShellClass} lg:hidden`}>
+            {renderAssistantPanel("h-full rounded-[20px] shadow-[0_24px_60px_rgba(0,0,0,0.42)]")}
           </div>
+          <FloatingHudPanel
+            panelId="sergeant"
+            defaultPosition={{ top: 88, left: 388 }}
+            className="z-[60] hidden h-[min(40rem,calc(100vh-7.5rem))] w-[24rem] lg:block"
+          >
+            {(dragHandle) =>
+              renderAssistantPanel(
+                "h-full rounded-[20px] shadow-[0_24px_60px_rgba(0,0,0,0.42)]",
+                dragHandle,
+              )
+            }
+          </FloatingHudPanel>
         </>
       ) : null}
 
@@ -657,35 +647,16 @@ export function SergeantAssistant() {
         <button
           type="button"
           data-tour="onboarding-beacon"
-          className="pointer-events-auto fixed bottom-4 right-4 z-[60] inline-flex items-center gap-3 rounded-full border border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2 font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-fg)] shadow-[0_18px_48px_rgba(0,0,0,0.35)] transition hover:border-[color:var(--hud-accent)]/45 hover:text-[color:var(--hud-accent-fg)]"
+          className="pointer-events-auto fixed bottom-4 right-4 z-[60] inline-flex items-center gap-2 rounded-full border border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2 font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-fg)] shadow-[0_16px_40px_rgba(0,0,0,0.32)] transition hover:border-[color:var(--hud-accent)]/45 hover:text-[color:var(--hud-accent-fg)]"
           onClick={handleLauncherClick}
         >
-          <span className="relative flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--hud-accent)]/35 bg-[color:var(--hud-accent)]/10">
-            {!prefersReducedMotion ? (
-              <span className="sergeant-launcher__pulse absolute inset-0 rounded-full bg-[color:var(--hud-accent)]/20" />
-            ) : null}
-            <span className="relative h-2.5 w-2.5 rounded-full bg-[color:var(--hud-accent)] shadow-[0_0_18px_rgba(227,107,23,0.6)]" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--hud-accent)]/35 bg-[color:var(--hud-accent)]/10 font-sans text-[10px] font-semibold text-[color:var(--hud-accent-fg)]">
+            S
           </span>
-          <span className="flex flex-col items-start">
-            <span className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-fg)]">
-              Sergeant
-            </span>
-            <span className="font-sans text-[10px] text-[color:var(--hud-muted)]">
-              {selectedScenarioId === scenario.id ? scenario.name : currentContextSnapshot.run.controllerLabel}
-            </span>
-          </span>
-          <span
-            aria-hidden="true"
-            className={`h-2 w-2 rounded-full ${
-              hasUnreadSystemHint
-                ? "bg-[color:var(--hud-warn)]"
-                : pausedOnboardingContext
-                  ? "bg-[color:var(--hud-warn)]"
-                  : hasCompleted
-                    ? "bg-[color:var(--hud-ok)]"
-                    : "bg-[color:var(--hud-accent)]"
-            }`}
-          />
+          <span>Chat with Sergeant</span>
+          {launcherHasAttention ? (
+            <span className="h-2 w-2 rounded-full bg-[color:var(--hud-warn)]" />
+          ) : null}
         </button>
       ) : null}
     </>

@@ -3,12 +3,15 @@
 import { formatMoveECEF } from "@/lib/sim/autopilot";
 import { KvTable, TacticalPanel } from "@/components/hud/tactical-ui";
 import type { LiveSimState } from "@/lib/sim/types";
+import type { ReactNode } from "react";
 
 type MetricsPanelProps = {
   state: LiveSimState;
+  className?: string;
+  panelDragHandle?: ReactNode;
 };
 
-export function MetricsPanel({ state }: MetricsPanelProps) {
+export function MetricsPanel({ state, className = "min-h-0 lg:h-full", panelDragHandle }: MetricsPanelProps) {
   const rows = [
     { k: "Pos err", v: `${state.metrics.positionError.toFixed(3)} m` },
     { k: "Lat err", v: `${state.metrics.lateralError.toFixed(3)} m` },
@@ -39,10 +42,11 @@ export function MetricsPanel({ state }: MetricsPanelProps) {
   return (
     <TacticalPanel
       data-tour="telemetry-panel"
-      className="min-h-0 lg:h-full"
+      className={className}
       scrollBody
       title="Telemetry"
       subtitle="Boom pose, errors, commands"
+      panelDragHandle={panelDragHandle}
       headerRight={
         <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
           T+{state.simTime.toFixed(1)}s

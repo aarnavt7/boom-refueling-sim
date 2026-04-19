@@ -9,7 +9,7 @@ import {
   SENSOR_RIGS,
 } from "@/lib/sim/constants";
 import { updateController } from "@/lib/sim/controller";
-import { getBoomTipPose } from "@/lib/sim/kinematics";
+import { getBoomTipPose, solveBoomIK } from "@/lib/sim/kinematics";
 import { computeMetrics } from "@/lib/sim/metrics";
 import { sampleReceiverPose } from "@/lib/sim/motion";
 import { runPassivePerception } from "@/lib/sim/perception";
@@ -190,7 +190,7 @@ export function runHeadlessScenario({
 
     const autopilotCommand = toAutopilotCommandECEF(controller.desiredTipMotion, getTankerPose());
     const plant = applyAutopilotCommand(boom, autopilotCommand, getTankerPose(), dt);
-    boom = plant.nextBoom;
+    boom = controller.state === "MATED" ? solveBoomIK(targetPose.position) : plant.nextBoom;
     const boomTipAfter = getBoomTipPose(boom).position;
     metrics = computeMetrics({
       boomTip: boomTipAfter,

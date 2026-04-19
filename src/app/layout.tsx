@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 
 import "./globals.css";
@@ -16,11 +16,30 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  applicationName: "Boom",
   title: {
     default: "Boom",
     template: "%s · Boom",
   },
   description: "Boom — browser refueling boom simulator (Next.js, React Three Fiber).",
+  icons: {
+    icon: [
+      { url: "/boom-logo.svg", type: "image/svg+xml" },
+    ],
+    shortcut: ["/boom-logo.svg"],
+    apple: ["/boom-logo.svg"],
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/boom-logo.svg",
+        color: "#e36b17",
+      },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#050505",
 };
 
 export default function RootLayout({

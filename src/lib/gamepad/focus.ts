@@ -72,6 +72,32 @@ function sortTargets(targets: readonly FocusTarget[]) {
   });
 }
 
+function getNextSiblingTargetId(
+  targets: readonly FocusTarget[],
+  currentId: string,
+  direction: "previous" | "next",
+) {
+  const sorted = sortTargets(targets);
+  const current = sorted.find((target) => target.id === currentId);
+  if (!current) {
+    return null;
+  }
+
+  const siblings = sorted.filter((target) => target.group === current.group);
+  if (siblings.length <= 1) {
+    return null;
+  }
+
+  const currentIndex = siblings.findIndex((target) => target.id === current.id);
+  if (currentIndex === -1) {
+    return null;
+  }
+
+  const delta = direction === "next" ? 1 : -1;
+  const nextIndex = (currentIndex + delta + siblings.length) % siblings.length;
+  return siblings[nextIndex]?.id ?? null;
+}
+
 export function getDefaultFocusTargetId(targets: readonly FocusTarget[]) {
   return sortTargets(targets)[0]?.id ?? null;
 }
@@ -91,6 +117,18 @@ export function getNextFocusTargetId({
 
   const sorted = sortTargets(targets);
   const current = sorted.find((target) => target.id === currentId) ?? sorted[0];
+
+  if (direction === "left" || direction === "right") {
+    const siblingTargetId = getNextSiblingTargetId(
+      sorted,
+      current.id,
+      direction === "right" ? "next" : "previous",
+    );
+    if (siblingTargetId) {
+      return siblingTargetId;
+    }
+  }
+
   const currentCenter = getCenter(current.rect);
 
   let bestScore = Number.POSITIVE_INFINITY;

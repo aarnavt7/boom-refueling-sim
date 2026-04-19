@@ -6,7 +6,7 @@ import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
 import { GuidedRunDirector } from "@/components/onboarding/GuidedRunDirector";
 import { GuidedTour } from "@/components/onboarding/GuidedTour";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
-import { SergeantAssistant } from "@/components/sergeant/SergeantAssistant";
+import { SergeantAssistant } from "../sergeant/SergeantAssistant";
 import {
   persistOnboardingState,
   type OnboardingStatus,

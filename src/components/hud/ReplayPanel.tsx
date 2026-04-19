@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { formatControllerStateLabel } from "@/components/hud/controllerPresentation";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
@@ -14,7 +14,13 @@ import {
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
-export function ReplayPanel() {
+export function ReplayPanel({
+  className = "min-h-0 lg:h-full",
+  panelDragHandle,
+}: {
+  className?: string;
+  panelDragHandle?: ReactNode;
+}) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [savedRuns, setSavedRuns] = useState<SavedRunSummary[]>([]);
   const [busyRunId, setBusyRunId] = useState<string | null>(null);
@@ -230,10 +236,11 @@ export function ReplayPanel() {
   return (
     <TacticalPanel
       data-tour="replay-panel"
-      className="min-h-0 lg:h-full"
+      className={className}
       scrollBody
       title="Replay"
       subtitle="Playback & local save"
+      panelDragHandle={panelDragHandle}
       headerRight={
         <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
           {activeReplayLength} samples

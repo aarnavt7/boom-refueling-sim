@@ -17,6 +17,7 @@ export function TacticalPanel({
   bodyClassName = "",
   scrollBody = false,
   headerRight,
+  panelDragHandle,
   ...props
 }: {
   title: string;
@@ -26,6 +27,7 @@ export function TacticalPanel({
   bodyClassName?: string;
   scrollBody?: boolean;
   headerRight?: ReactNode;
+  panelDragHandle?: ReactNode;
 } & ComponentPropsWithoutRef<"section">) {
   return (
     <section
@@ -44,7 +46,12 @@ export function TacticalPanel({
             </h2>
           ) : null}
         </div>
-        {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+        {headerRight || panelDragHandle ? (
+          <div className="shrink-0 flex items-start gap-2">
+            {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+            {panelDragHandle ? <div className="shrink-0">{panelDragHandle}</div> : null}
+          </div>
+        ) : null}
       </header>
       <div
         data-gamepad-scroll-container={scrollBody ? "true" : undefined}

@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { CycleControl } from "@/components/hud/CycleControl";
 import { formatControllerStateLabel } from "@/components/hud/controllerPresentation";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
@@ -12,7 +14,13 @@ import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
-export function ScenarioPanel() {
+export function ScenarioPanel({
+  className = "min-h-0 lg:h-full",
+  panelDragHandle,
+}: {
+  className?: string;
+  panelDragHandle?: ReactNode;
+}) {
   const selectedScenarioId = useUiStore((state) => state.selectedScenarioId);
   const selectedAircraftCardId = useUiStore((state) => state.selectedAircraftCardId);
   const cameraMode = useUiStore((state) => state.cameraMode);
@@ -109,10 +117,11 @@ export function ScenarioPanel() {
   return (
     <TacticalPanel
       data-tour="scenario-panel"
-      className="min-h-0 lg:h-full"
+      className={className}
       scrollBody
       title="Scenario"
       subtitle={`${selectedScenario.environment.name} · ${selectedScenario.mission.name}`}
+      panelDragHandle={panelDragHandle}
     >
       <p className="border-b border-[color:var(--hud-line)] px-3 py-2 font-sans text-xs leading-relaxed text-[color:var(--hud-muted)]">
         {selectedScenario.description}

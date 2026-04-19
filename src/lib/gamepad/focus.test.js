@@ -71,6 +71,26 @@ describe("gamepad focus helpers", () => {
     ).toBe("replay-toggle");
   });
 
+  test("cycles horizontally through siblings in the same button group", () => {
+    const hudTargets = targets.filter((target) => target.scope === "hud");
+
+    expect(
+      getNextFocusTargetId({
+        targets: hudTargets,
+        currentId: "start-run",
+        direction: "right",
+      }),
+    ).toBe("pause-run");
+
+    expect(
+      getNextFocusTargetId({
+        targets: hudTargets,
+        currentId: "pause-run",
+        direction: "left",
+      }),
+    ).toBe("start-run");
+  });
+
   test("jumps between ordered focus groups with bumpers", () => {
     const hudTargets = targets.filter((target) => target.scope === "hud");
 
