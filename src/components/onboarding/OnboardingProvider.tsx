@@ -6,11 +6,13 @@ import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
 import { GuidedRunDirector } from "@/components/onboarding/GuidedRunDirector";
 import { GuidedTour } from "@/components/onboarding/GuidedTour";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
+import { SergeantAssistant } from "@/components/sergeant/SergeantAssistant";
 import {
   persistOnboardingState,
   type OnboardingStatus,
   useOnboardingStore,
 } from "@/lib/store/onboardingStore";
+import { useSergeantStore } from "@/lib/store/sergeantStore";
 
 function getStatusLabel(
   status: OnboardingStatus,
@@ -209,9 +211,9 @@ export function OnboardingProvider({
   const startGuidedRun = useOnboardingStore((state) => state.startGuidedRun);
   const resumeGuidedRun = useOnboardingStore((state) => state.resumeGuidedRun);
   const skipOnboarding = useOnboardingStore((state) => state.skipOnboarding);
-  const openPanel = useOnboardingStore((state) => state.openPanel);
   const closePanel = useOnboardingStore((state) => state.closePanel);
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
+  const openAssistant = useSergeantStore((state) => state.openAssistant);
 
   useEffect(() => {
     hydrateFromStorage();
@@ -358,18 +360,9 @@ export function OnboardingProvider({
     skipOnboarding();
   }
 
-  function handleBeaconAction() {
-    if (status === "tour" && isDismissed && !hasCompletedOrientationTour) {
-      resumeOrientationTour();
-      return;
-    }
-
-    if (isMissionPaused) {
-      resumeGuidedRun();
-      return;
-    }
-
-    openPanel();
+  function handleOpenSergeant() {
+    closePanel();
+    openAssistant();
   }
 
   return (
@@ -410,6 +403,22 @@ export function OnboardingProvider({
                     )}
                   </p>
 
+                  <div className="flex items-center justify-between gap-3 rounded-[18px] border border-[color:var(--hud-line)] bg-black/15 px-3 py-2">
+                    <p className="font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+                      Need a guide? Sergeant can explain what you&apos;re seeing and recommend the next step.
+                    </p>
+                    <HudButton
+                      variant="ghost"
+                      data-gamepad-focus-id="onboarding-sergeant"
+                      data-gamepad-group="onboarding-panel"
+                      data-gamepad-scope="overlay"
+                      data-gamepad-label="Ask Sergeant"
+                      onClick={handleOpenSergeant}
+                    >
+                      Ask Sergeant
+                    </HudButton>
+                  </div>
+
                   <div className="overflow-hidden rounded-[18px] border border-[color:var(--hud-line)] bg-black/20">
                     <div className="flex items-center justify-between border-b border-[color:var(--hud-line)] px-3 py-2 font-sans text-[10px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)]">
                       <span>Checklist scaffold</span>
@@ -440,13 +449,36 @@ export function OnboardingProvider({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <HudButton variant="primary" onClick={handlePrimaryAction}>
+                    <HudButton
+                      variant="primary"
+                      data-gamepad-focus-id="onboarding-primary"
+                      data-gamepad-group="onboarding-panel"
+                      data-gamepad-scope="overlay"
+                      data-gamepad-label={primaryLabel}
+                      data-gamepad-default="true"
+                      onClick={handlePrimaryAction}
+                    >
                       {primaryLabel}
                     </HudButton>
-                    <HudButton variant="ghost" onClick={handleSecondaryAction}>
+                    <HudButton
+                      variant="ghost"
+                      data-gamepad-focus-id="onboarding-secondary"
+                      data-gamepad-group="onboarding-panel"
+                      data-gamepad-scope="overlay"
+                      data-gamepad-label={secondaryLabel}
+                      data-gamepad-back-action="true"
+                      onClick={handleSecondaryAction}
+                    >
                       {secondaryLabel}
                     </HudButton>
-                    <HudButton variant="ghost" onClick={resetOnboarding}>
+                    <HudButton
+                      variant="ghost"
+                      data-gamepad-focus-id="onboarding-reset"
+                      data-gamepad-group="onboarding-panel"
+                      data-gamepad-scope="overlay"
+                      data-gamepad-label="Reset onboarding"
+                      onClick={resetOnboarding}
+                    >
                       Reset
                     </HudButton>
                   </div>
@@ -454,35 +486,9 @@ export function OnboardingProvider({
               </TacticalPanel>
             </div>
           ) : null}
-
-          {!isOpen && !isWelcomeOpen && !isTourActive && !isMissionActive ? (
-            <button
-              type="button"
-              data-tour="onboarding-beacon"
-              className="pointer-events-auto absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-full border border-[color:var(--hud-line)] bg-[color:var(--hud-panel)] px-3 py-2 font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-fg)] shadow-[0_18px_48px_rgba(0,0,0,0.35)] transition hover:border-[color:var(--hud-accent)]/45 hover:text-[color:var(--hud-accent-fg)]"
-              onClick={handleBeaconAction}
-            >
-              <span
-                aria-hidden="true"
-                className={`h-2 w-2 rounded-full ${
-                  hasCompleted
-                    ? "bg-[color:var(--hud-ok)]"
-                    : isMissionPaused
-                      ? "bg-[color:var(--hud-warn)]"
-                    : status === "tour" && isDismissed
-                      ? "bg-[color:var(--hud-warn)]"
-                      : "bg-[color:var(--hud-accent)]"
-                }`}
-              />
-              {isMissionPaused
-                ? "Resume mission"
-                : status === "tour" && isDismissed && !hasCompletedOrientationTour
-                  ? "Resume tour"
-                  : "Onboarding"}
-            </button>
-          ) : null}
         </div>
       ) : null}
+      <SergeantAssistant />
     </>
   );
 }

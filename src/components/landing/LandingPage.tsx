@@ -14,7 +14,23 @@ const techLayers = [
   { name: "State", detail: "Zustand for sim + UI." },
   { name: "Perception", detail: "Passive visible / thermal sensor suite + fused receptacle tracking." },
   { name: "Safety", detail: "ECEF autopilot commands, limits, hold / abort / breakaway logic." },
+  { name: "Autonomy eval", detail: "Client-side upload worker, overlay replay, and post-run offset analytics." },
   { name: "Save", detail: "localStorage summaries + IndexedDB replay archives." },
+];
+
+const mathCards = [
+  {
+    title: "Geometry",
+    body: "The controller is always solving relative position: where the boom tip is, where the receptacle is, and what offset remains in lateral, vertical, and forward axes.",
+  },
+  {
+    title: "Control",
+    body: "Desired boom-tip motion becomes `moveECEF(...)` commands, then inverse kinematics and rate limits turn that into yaw, pitch, and extension changes the plant can actually follow.",
+  },
+  {
+    title: "Safety",
+    body: "Closure spikes, disagreement between passive tracks, and keep-out violations trigger hold, abort, or breakaway before the controller keeps pushing into a bad intercept.",
+  },
 ];
 
 export function LandingPage() {
@@ -69,6 +85,33 @@ export function LandingPage() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          <section
+            id="math"
+            className="landing-section mt-14 border-t border-landing-line pt-12 sm:mt-16 sm:pt-14"
+          >
+            <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-ember">
+              Math + physics
+            </p>
+            <h2 className="mt-3 max-w-2xl font-sans text-3xl font-semibold leading-tight tracking-tight text-landing-fg sm:text-4xl">
+              The project in plain English.
+            </h2>
+            <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-landing-muted">
+              This sim is about relative motion, not magic. The hard part is keeping a moving boom and a moving
+              receptacle aligned while perception gets noisy and the safe closure window stays narrow.
+            </p>
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {mathCards.map((card) => (
+                <article
+                  key={card.title}
+                  className="rounded-2xl border border-landing-line bg-landing-panel/85 px-5 py-5"
+                >
+                  <h3 className="font-sans text-base font-semibold text-landing-fg">{card.title}</h3>
+                  <p className="mt-3 font-sans text-sm leading-relaxed text-landing-muted">{card.body}</p>
+                </article>
+              ))}
+            </div>
           </section>
 
           <section className="landing-section mt-14 border-t border-landing-line pt-10 pb-6 sm:mt-16">

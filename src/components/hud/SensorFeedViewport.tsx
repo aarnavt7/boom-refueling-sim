@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import { ViewportFrame } from "@/components/hud/tactical-ui";
-import { getDisplayedState } from "@/lib/sim/replay";
+import {
+  applySensorViewportModality,
+  resolveSensorViewportFeed,
+  SENSOR_VIEWPORT_SOURCE_OPTIONS,
+} from "@/lib/sim/sensorViewport";
+import { useDisplayedReplayBundle } from "@/lib/sim/useDisplayedReplayBundle";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
@@ -29,18 +34,38 @@ export function SensorFeedViewport({
   rootClassName = "",
 }: SensorFeedViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const live = useSimStore((state) => state.live);
-  const replaySamples = useSimStore((state) => state.replaySamples);
   const sensorFrame = useSimStore((state) => state.sensorFrame);
-  const replayMode = useUiStore((state) => state.replayMode);
-  const replayIndex = useUiStore((state) => state.replayIndex);
-  const displayed = useMemo(
-    () => getDisplayedState(live, replaySamples, replayMode, replayIndex),
-    [live, replayIndex, replayMode, replaySamples],
+  const sensorViewportSource = useUiStore((state) => state.sensorViewportSource);
+  const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
+  const replayDataSource = useUiStore((state) => state.replayDataSource);
+  const evaluationView = useUiStore((state) => state.evaluationView);
+  const displayed = useDisplayedReplayBundle().primary;
+  const viewportFeed = useMemo(
+    () =>
+      resolveSensorViewportFeed({
+        state: displayed,
+        source: sensorViewportSource,
+        modality: sensorViewportModality,
+      }),
+    [displayed, sensorViewportModality, sensorViewportSource],
   );
+  const renderedPixels = useMemo(() => {
+    if (!sensorFrame) {
+      return null;
+    }
+
+    return applySensorViewportModality(sensorFrame.pixels, viewportFeed.effectiveModality);
+  }, [sensorFrame, viewportFeed.effectiveModality]);
+  const sourceLabel =
+    SENSOR_VIEWPORT_SOURCE_OPTIONS.find((option) => option.id === viewportFeed.effectiveSensorId)?.label ??
+    viewportFeed.observation.sensorName;
+  const feedAvailable =
+    viewportFeed.observation.visible &&
+    !viewportFeed.observation.dropout &&
+    viewportFeed.observation.imagePoint !== null;
 
   useEffect(() => {
-    if (!sensorFrame || !canvasRef.current) {
+    if (!sensorFrame || !renderedPixels || !canvasRef.current) {
       return;
     }
 
@@ -53,29 +78,49 @@ export function SensorFeedViewport({
     canvas.width = sensorFrame.width;
     canvas.height = sensorFrame.height;
     const safePixels = new Uint8ClampedArray(sensorFrame.width * sensorFrame.height * 4);
-    safePixels.set(sensorFrame.pixels);
+    safePixels.set(renderedPixels);
     const image = new ImageData(safePixels, sensorFrame.width, sensorFrame.height);
     context.putImageData(image, 0, 0);
-  }, [sensorFrame]);
+  }, [renderedPixels, sensorFrame]);
 
   const inner = (
     <div className={`relative ${aspectClassName}`}>
       <canvas ref={canvasRef} className="h-full w-full object-cover opacity-95" />
+      <div className="pointer-events-none absolute left-2 top-2 rounded-full border border-[color:var(--hud-line)] bg-black/70 px-2 py-1 font-sans text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--hud-fg)]">
+        {viewportFeed.effectiveModality}
+      </div>
+      <div className="pointer-events-none absolute right-2 top-2 rounded-full border border-[color:var(--hud-line)] bg-black/70 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-fg)]">
+        {sourceLabel}
+      </div>
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="h-[62%] w-[62%] border border-[color:var(--hud-accent)]/25" />
         <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[color:var(--hud-accent)]/15" />
         <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[color:var(--hud-accent)]/15" />
       </div>
-      {displayed.estimate.visible && displayed.estimate.imagePoint ? (
+      {feedAvailable && viewportFeed.observation.imagePoint ? (
         <div
           className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 border border-[color:var(--hud-accent)]/65"
           style={{
-            left: `${((displayed.estimate.imagePoint.x + 1) * 0.5 * 100).toFixed(2)}%`,
-            top: `${((1 - (displayed.estimate.imagePoint.y + 1) * 0.5) * 100).toFixed(2)}%`,
+            left: `${((viewportFeed.observation.imagePoint.x + 1) * 0.5 * 100).toFixed(2)}%`,
+            top: `${((1 - (viewportFeed.observation.imagePoint.y + 1) * 0.5) * 100).toFixed(2)}%`,
           }}
         >
           <span className="absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-[color:var(--hud-accent)]" />
           <span className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 -translate-y-1/2 bg-[color:var(--hud-accent)]" />
+        </div>
+      ) : null}
+      {!feedAvailable ? (
+        <div className="pointer-events-none absolute bottom-2 right-2 rounded-full border border-[color:var(--hud-warn)]/60 bg-black/70 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-warn)]">
+          {viewportFeed.observation.dropout ? "Sensor dropout" : "Track unavailable"}
+        </div>
+      ) : null}
+      {replayDataSource === "autonomy" ? (
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded-full border border-[color:var(--hud-line)] bg-black/60 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-fg)]">
+          {evaluationView === "overlay"
+            ? "Overlay replay"
+            : evaluationView === "uploaded"
+              ? "Uploaded replay"
+              : "Baseline replay"}
         </div>
       ) : null}
     </div>

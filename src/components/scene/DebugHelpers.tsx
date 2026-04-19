@@ -1,24 +1,14 @@
 "use client";
 
 import { Line } from "@react-three/drei";
-import { useMemo } from "react";
 
 import { getBoomTipPose } from "@/lib/sim/kinematics";
-import { getDisplayedState } from "@/lib/sim/replay";
-import { useSimStore } from "@/lib/store/simStore";
+import { useDisplayedReplayBundle } from "@/lib/sim/useDisplayedReplayBundle";
 import { useUiStore } from "@/lib/store/uiStore";
 
 export function DebugHelpers() {
-  const live = useSimStore((state) => state.live);
-  const replaySamples = useSimStore((state) => state.replaySamples);
-  const replayMode = useUiStore((state) => state.replayMode);
-  const replayIndex = useUiStore((state) => state.replayIndex);
   const showDebug = useUiStore((state) => state.showDebug);
-
-  const displayed = useMemo(
-    () => getDisplayedState(live, replaySamples, replayMode, replayIndex),
-    [live, replaySamples, replayMode, replayIndex],
-  );
+  const displayed = useDisplayedReplayBundle().primary;
 
   if (!showDebug) {
     return null;

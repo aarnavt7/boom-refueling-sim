@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 
+import { CycleControl } from "@/components/hud/CycleControl";
 import {
   formatControllerStateLabel,
   guidanceHeaderStatusClass,
@@ -15,7 +16,13 @@ import { ScenarioPanel } from "@/components/hud/ScenarioPanel";
 import { SensorFeedViewport } from "@/components/hud/SensorFeedViewport";
 import { SegmentedBar, StagePipeline, TacticalPanel } from "@/components/hud/tactical-ui";
 import { CONTROLLER_SEQUENCE } from "@/lib/sim/constants";
-import { getDisplayedState } from "@/lib/sim/replay";
+import { getDisplayedReplayBundle } from "@/lib/sim/replay";
+import {
+  resolveSensorViewportFeed,
+  SENSOR_VIEWPORT_MODALITY_OPTIONS,
+  SENSOR_VIEWPORT_SOURCE_OPTIONS,
+} from "@/lib/sim/sensorViewport";
+import { useGamepadStore } from "@/lib/store/gamepadStore";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
@@ -27,14 +34,65 @@ type DockingHudProps = {
 export function DockingHud({ embedded = false }: DockingHudProps) {
   const live = useSimStore((state) => state.live);
   const replaySamples = useSimStore((state) => state.replaySamples);
+  const autonomyEvaluation = useSimStore((state) => state.autonomyEvaluation);
   const persistMessage = useSimStore((state) => state.persistMessage);
   const liveRunState = useUiStore((state) => state.liveRunState);
   const replayMode = useUiStore((state) => state.replayMode);
+  const replayDataSource = useUiStore((state) => state.replayDataSource);
+  const evaluationView = useUiStore((state) => state.evaluationView);
   const replayIndex = useUiStore((state) => state.replayIndex);
+  const sensorViewportSource = useUiStore((state) => state.sensorViewportSource);
+  const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
+  const setSensorViewportSource = useUiStore((state) => state.setSensorViewportSource);
+  const setSensorViewportModality = useUiStore((state) => state.setSensorViewportModality);
+  const gamepadConnected = useGamepadStore((state) => state.connected);
+  const gamepadDeviceType = useGamepadStore((state) => state.deviceType);
 
-  const displayed = useMemo(
-    () => getDisplayedState(live, replaySamples, replayMode, replayIndex),
-    [live, replaySamples, replayMode, replayIndex],
+  const displayedBundle = useMemo(
+    () =>
+      getDisplayedReplayBundle({
+        live,
+        sessionReplaySamples: replaySamples,
+        autonomyBaselineReplaySamples: autonomyEvaluation?.baselineReplaySamples ?? [],
+        autonomyUploadedReplaySamples: autonomyEvaluation?.uploadedReplaySamples ?? [],
+        replayMode,
+        replayIndex,
+        replayDataSource,
+        evaluationView,
+      }),
+    [
+      autonomyEvaluation?.baselineReplaySamples,
+      autonomyEvaluation?.uploadedReplaySamples,
+      evaluationView,
+      live,
+      replayDataSource,
+      replayIndex,
+      replayMode,
+      replaySamples,
+    ],
+  );
+  const displayed = displayedBundle.primary;
+  const comparisonState = displayedBundle.comparison;
+  const viewportFeed = useMemo(
+    () =>
+      resolveSensorViewportFeed({
+        state: displayed,
+        source: sensorViewportSource,
+        modality: sensorViewportModality,
+      }),
+    [displayed, sensorViewportModality, sensorViewportSource],
+  );
+  const viewportSourceDetail =
+    SENSOR_VIEWPORT_SOURCE_OPTIONS.find((option) => option.id === sensorViewportSource)?.detail ??
+    SENSOR_VIEWPORT_SOURCE_OPTIONS[0].detail;
+  const viewportModalityDetail =
+    SENSOR_VIEWPORT_MODALITY_OPTIONS.find((option) => option.id === sensorViewportModality)?.detail ??
+    SENSOR_VIEWPORT_MODALITY_OPTIONS[0].detail;
+  const sensorViewportSourceIndex = SENSOR_VIEWPORT_SOURCE_OPTIONS.findIndex(
+    (option) => option.id === sensorViewportSource,
+  );
+  const sensorViewportModalityIndex = SENSOR_VIEWPORT_MODALITY_OPTIONS.findIndex(
+    (option) => option.id === sensorViewportModality,
   );
 
   const headerClass = guidanceHeaderStatusClass(displayed.controllerState);
@@ -53,6 +111,29 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
       : liveRunState === "paused"
         ? "border-[color:var(--hud-warn)]/60 text-[color:var(--hud-warn)]"
         : "border-[color:var(--hud-line)] text-[color:var(--hud-muted)]";
+
+  function cycleViewportSource(delta: number) {
+    const safeIndex = sensorViewportSourceIndex === -1 ? 0 : sensorViewportSourceIndex;
+    const nextIndex =
+      (safeIndex + delta + SENSOR_VIEWPORT_SOURCE_OPTIONS.length) %
+      SENSOR_VIEWPORT_SOURCE_OPTIONS.length;
+    setSensorViewportSource(
+      SENSOR_VIEWPORT_SOURCE_OPTIONS[nextIndex]?.id ??
+        SENSOR_VIEWPORT_SOURCE_OPTIONS[0].id,
+    );
+  }
+
+  function cycleViewportModality(delta: number) {
+    const safeIndex =
+      sensorViewportModalityIndex === -1 ? 0 : sensorViewportModalityIndex;
+    const nextIndex =
+      (safeIndex + delta + SENSOR_VIEWPORT_MODALITY_OPTIONS.length) %
+      SENSOR_VIEWPORT_MODALITY_OPTIONS.length;
+    setSensorViewportModality(
+      SENSOR_VIEWPORT_MODALITY_OPTIONS[nextIndex]?.id ??
+        SENSOR_VIEWPORT_MODALITY_OPTIONS[0].id,
+    );
+  }
 
   const rootLayout = embedded
     ? "pointer-events-none absolute inset-0 z-10 flex flex-col text-[color:var(--hud-fg)]"
@@ -87,8 +168,16 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
             <span className="hidden font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)] md:inline">
               Frame {displayed.frame}
             </span>
+            {gamepadConnected ? (
+              <span className="rounded-full border border-[color:var(--hud-accent)]/45 px-2 py-0.5 font-sans text-[11px] font-medium text-[color:var(--hud-accent-fg)]">
+                {gamepadDeviceType === "xbox" ? "Xbox connected" : "Controller connected"}
+              </span>
+            ) : null}
             <Link
               href="/"
+              data-gamepad-focus-id="sim-home"
+              data-gamepad-group="sim-header"
+              data-gamepad-label="Return home"
               className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[11px] font-medium text-[color:var(--hud-muted)] transition hover:border-[color:var(--hud-accent)]/50 hover:text-[color:var(--hud-accent-fg)]"
             >
               Home
@@ -127,14 +216,103 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
 
             <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
               <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">
-                Passive visible / thermal handoff · {displayed.estimate.sensorName}
+                Passive sensor viewport · {viewportFeed.hasManualSourceOverride ? "manual override" : "auto handoff"}
               </p>
               <p className="mt-1 font-sans text-[11px] text-[color:var(--hud-fg)]">
-                {displayed.estimate.modality} · {displayed.tracker.preferredRole} track · {displayed.estimate.notes.join(" · ")}
+                {viewportFeed.observation.sensorName} · {viewportFeed.effectiveModality}
+                {viewportFeed.hasManualModalityOverride ? " viewport override" : ""} · controller {displayed.estimate.sensorName}
               </p>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <CycleControl
+                  label="Source"
+                  valueLabel={
+                    SENSOR_VIEWPORT_SOURCE_OPTIONS.find((option) => option.id === sensorViewportSource)?.label ??
+                    SENSOR_VIEWPORT_SOURCE_OPTIONS[0].label
+                  }
+                  detail={viewportSourceDetail}
+                  onPrevious={() => cycleViewportSource(-1)}
+                  onNext={() => cycleViewportSource(1)}
+                  previousLabel="Previous sensor source"
+                  nextLabel="Next sensor source"
+                  gamepadBaseId="sensor-source"
+                  gamepadGroup="guidance-sensor"
+                />
+                <CycleControl
+                  label="Modality"
+                  valueLabel={
+                    SENSOR_VIEWPORT_MODALITY_OPTIONS.find((option) => option.id === sensorViewportModality)?.label ??
+                    SENSOR_VIEWPORT_MODALITY_OPTIONS[0].label
+                  }
+                  detail={`${viewportModalityDetail} The autonomy stack stays on scenario-driven sensing.`}
+                  onPrevious={() => cycleViewportModality(-1)}
+                  onNext={() => cycleViewportModality(1)}
+                  previousLabel="Previous sensor modality"
+                  nextLabel="Next sensor modality"
+                  gamepadBaseId="sensor-modality"
+                  gamepadGroup="guidance-sensor"
+                />
+              </div>
               <div data-tour="sensor-feed">
                 <SensorFeedViewport viewportFrameClassName="mt-2 overflow-hidden" />
               </div>
+            </div>
+
+            <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">Track entity</p>
+                <span
+                  className={`rounded-full border px-2 py-0.5 font-sans text-[10px] font-medium ${
+                    displayed.tracker.lost
+                      ? "border-[color:var(--hud-warn)]/60 text-[color:var(--hud-warn)]"
+                      : "border-[color:var(--hud-ok)]/45 text-[color:var(--hud-ok)]"
+                  }`}
+                >
+                  {displayed.tracker.lost ? "Recovering" : "Tracked"}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 font-sans text-[11px]">
+                <div>
+                  <p className="text-[color:var(--hud-muted)]">Entity ID</p>
+                  <p className="text-[color:var(--hud-fg)]">aar.receiver.track-01</p>
+                </div>
+                <div>
+                  <p className="text-[color:var(--hud-muted)]">Active sensors</p>
+                  <p className="text-[color:var(--hud-fg)]">
+                    {displayed.tracker.activeSensorIds.length} · {displayed.estimate.sensorName}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[color:var(--hud-muted)]">Predicted intercept</p>
+                  <p className="text-[color:var(--hud-fg)]">
+                    {displayed.metrics.closureRate > 0.001
+                      ? `${(displayed.metrics.positionError / Math.max(displayed.metrics.closureRate, 1e-3)).toFixed(1)} s`
+                      : "Holding"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[color:var(--hud-muted)]">Replay view</p>
+                  <p className="text-[color:var(--hud-fg)]">
+                    {replayDataSource === "autonomy"
+                      ? evaluationView === "overlay"
+                        ? "Overlay"
+                        : evaluationView === "uploaded"
+                          ? "Uploaded"
+                          : "Baseline"
+                      : "Session"}
+                  </p>
+                </div>
+              </div>
+              {comparisonState ? (
+                <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+                  Comparison delta · receiver offset{" "}
+                  {Math.hypot(
+                    comparisonState.receiverPose.position.x - displayed.receiverPose.position.x,
+                    comparisonState.receiverPose.position.y - displayed.receiverPose.position.y,
+                    comparisonState.receiverPose.position.z - displayed.receiverPose.position.z,
+                  ).toFixed(3)}{" "}
+                  m
+                </p>
+              ) : null}
             </div>
 
             <SegmentedBar value={displayed.tracker.confidence} />
@@ -170,7 +348,7 @@ export function DockingHud({ embedded = false }: DockingHudProps) {
           className="pointer-events-auto flex min-h-0 min-w-0 basis-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] lg:grid lg:w-[min(22rem,40vw)] lg:flex-none lg:overflow-hidden lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
         >
           <ScenarioPanel />
-          <ReplayPanel state={displayed} />
+          <ReplayPanel />
         </aside>
       </div>
     </div>

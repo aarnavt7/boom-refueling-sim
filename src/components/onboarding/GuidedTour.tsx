@@ -207,6 +207,11 @@ export function GuidedTour() {
           </div>
           <button
             type="button"
+            data-gamepad-focus-id="tour-close"
+            data-gamepad-group="tour-actions"
+            data-gamepad-scope="overlay"
+            data-gamepad-label="Close orientation tour"
+            data-gamepad-back-action="true"
             className="font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)] transition hover:text-[color:var(--hud-accent-fg)]"
             onClick={() => dismissOrientationTour()}
           >
@@ -226,16 +231,36 @@ export function GuidedTour() {
         <div className="flex items-center justify-between gap-2 border-t border-[color:var(--hud-line)] px-4 py-3">
           <HudButton
             variant="ghost"
+            data-gamepad-focus-id="tour-back"
+            data-gamepad-group="tour-actions"
+            data-gamepad-scope="overlay"
+            data-gamepad-label="Previous tour step"
             disabled={index === 0}
             onClick={() => controls.prev(ORIGIN.BUTTON_BACK)}
           >
             Back
           </HudButton>
           <div className="flex items-center gap-2">
-            <HudButton variant="ghost" onClick={() => dismissOrientationTour()}>
+            <HudButton
+              variant="ghost"
+              data-gamepad-focus-id="tour-skip"
+              data-gamepad-group="tour-actions"
+              data-gamepad-scope="overlay"
+              data-gamepad-label="Skip orientation tour"
+              data-gamepad-back-action="true"
+              onClick={() => dismissOrientationTour()}
+            >
               Skip
             </HudButton>
-            <HudButton variant="primary" onClick={() => controls.next(ORIGIN.BUTTON_PRIMARY)}>
+            <HudButton
+              variant="primary"
+              data-gamepad-focus-id="tour-next"
+              data-gamepad-group="tour-actions"
+              data-gamepad-scope="overlay"
+              data-gamepad-label="Next tour step"
+              data-gamepad-default="true"
+              onClick={() => controls.next(ORIGIN.BUTTON_PRIMARY)}
+            >
               Next
             </HudButton>
           </div>

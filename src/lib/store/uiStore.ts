@@ -11,6 +11,8 @@ import type {
   CameraMode,
   EvaluationView,
   ReplayDataSource,
+  SensorViewportModality,
+  SensorViewportSource,
 } from "@/lib/sim/types";
 
 export type LiveRunState = "stopped" | "running" | "paused";
@@ -19,6 +21,8 @@ type UiStore = {
   selectedScenarioId: string;
   selectedAircraftCardId: AircraftCardId;
   cameraMode: CameraMode;
+  sensorViewportSource: SensorViewportSource;
+  sensorViewportModality: SensorViewportModality;
   showDebug: boolean;
   liveRunState: LiveRunState;
   replayMode: boolean;
@@ -32,6 +36,8 @@ type UiStore = {
   setScenarioId: (scenarioId: string) => void;
   setSelectedAircraftCardId: (aircraftCardId: AircraftCardId) => void;
   setCameraMode: (cameraMode: CameraMode) => void;
+  setSensorViewportSource: (source: SensorViewportSource) => void;
+  setSensorViewportModality: (modality: SensorViewportModality) => void;
   setShowDebug: (showDebug: boolean) => void;
   toggleDebug: () => void;
   setLiveRunState: (state: LiveRunState) => void;
@@ -52,6 +58,8 @@ export const useUiStore = create<UiStore>((set) => ({
   selectedScenarioId: "steady-approach",
   selectedAircraftCardId: DEFAULT_AIRCRAFT_CARD_ID,
   cameraMode: DEFAULT_CAMERA_MODE,
+  sensorViewportSource: "auto",
+  sensorViewportModality: "auto",
   showDebug: false,
   liveRunState: "stopped",
   replayMode: false,
@@ -64,6 +72,8 @@ export const useUiStore = create<UiStore>((set) => ({
   setScenarioId: (selectedScenarioId) => set({ selectedScenarioId }),
   setSelectedAircraftCardId: (selectedAircraftCardId) => set({ selectedAircraftCardId }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
+  setSensorViewportSource: (sensorViewportSource) => set({ sensorViewportSource }),
+  setSensorViewportModality: (sensorViewportModality) => set({ sensorViewportModality }),
   setShowDebug: (showDebug) => set({ showDebug }),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
   setLiveRunState: (liveRunState) => set({ liveRunState }),

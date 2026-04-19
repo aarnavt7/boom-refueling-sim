@@ -47,6 +47,7 @@ export function TacticalPanel({
         {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
       </header>
       <div
+        data-gamepad-scroll-container={scrollBody ? "true" : undefined}
         className={`relative min-h-0 flex-1 ${
           scrollBody
             ? "overflow-y-auto overscroll-y-contain touch-pan-y [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]"

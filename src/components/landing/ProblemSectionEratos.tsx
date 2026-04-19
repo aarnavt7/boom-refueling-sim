@@ -19,12 +19,20 @@ export function ProblemSectionEratos() {
             The boom is the long, operator-steered arm that links the tanker to the receiving jet so fuel can flow at
             altitude.
           </p>
-          <p>The real maneuver is demanding: speed, turbulence, and visibility all matter.</p>
-          <p>Night, open water, and EMCON make the geometry and sensing problem even harder.</p>
+          <p>
+            The geometry is unforgiving: closure rate, lateral offset, and vertical alignment all have to stay inside a
+            tight envelope while both aircraft keep moving.
+          </p>
+          <p>
+            Air Mobility Command&apos;s Aug. 25, 2025 release summarized KC-46 boom mishaps from Oct. 15, 2022,
+            Nov. 7, 2022, and Aug. 21, 2024 where nozzle binding, excessive closure, and instability damaged the boom
+            and tanker during refueling attempts.
+          </p>
+          <p>Night, open water, and EMCON make the perception and alignment problem even harder.</p>
           <p>Live training is costly, weather-dependent, and hard to repeat on demand.</p>
           <p>
-            Software rehearsal should mirror the same spatial challenge — approach, passive sensing, alignment, and
-            safety logic — without replacing certified instruction.
+            Software rehearsal should mirror that exact spatial challenge — approach, passive sensing, alignment,
+            closure management, and safety logic — without replacing certified instruction.
           </p>
         </div>
         <ProblemContextImage />
@@ -32,12 +40,12 @@ export function ProblemSectionEratos() {
 
       <div className="mt-10 sm:mt-12">
         <h2 className="max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-landing-fg sm:text-4xl">
-          Practice makes perfect.
+          Practice the geometry before the boom hits metal.
         </h2>
         <p className="mt-5 max-w-2xl font-sans text-base leading-relaxed text-landing-muted sm:text-lg">
-          Practice shouldn&apos;t mean hopping between unrelated apps and folders. Boom puts the 3D scene, passive
-          visible / thermal sensor view, mission profile controls, and replay in one place so you can review fast.
-          Treat it as a training aid — not a replacement for official courses or certification.
+          Boom puts the 3D scene, passive visible / thermal sensor view, uploadable autonomy perturbations, mission
+          profile controls, and post-run analytics in one place so teams can rehearse the exact offsets and closure
+          trends that matter.
         </p>
 
         <div className="mt-6 flex justify-center sm:mt-7">

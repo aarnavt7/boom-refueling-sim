@@ -20,6 +20,7 @@ import type {
   ReplaySample,
   ScenarioPreset,
   SensorFrame,
+  UploadedAutonomyManifest,
 } from "@/lib/sim/types";
 
 type PersistStatus = "idle" | "saving" | "saved" | "error";
@@ -29,6 +30,7 @@ type SimStore = {
   live: LiveSimState;
   replaySamples: ReplaySample[];
   autonomyEvaluation: AutonomyEvaluationBundle | null;
+  lastAutonomyUpload: UploadedAutonomyManifest | null;
   sensorFrame: SensorFrame | null;
   lastRecordedAt: number;
   persistStatus: PersistStatus;
@@ -39,6 +41,7 @@ type SimStore = {
   setReplaySamples: (samples: ReplaySample[]) => void;
   pushReplaySample: (sample: ReplaySample) => void;
   setAutonomyEvaluation: (bundle: AutonomyEvaluationBundle | null) => void;
+  setLastAutonomyUpload: (manifest: UploadedAutonomyManifest | null) => void;
   setLastRecordedAt: (time: number) => void;
   setSensorFrame: (frame: SensorFrame) => void;
   setPersistStatus: (status: PersistStatus, message?: string | null) => void;
@@ -75,6 +78,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   live: createInitialLiveState(),
   replaySamples: [],
   autonomyEvaluation: null,
+  lastAutonomyUpload: null,
   sensorFrame: null,
   lastRecordedAt: 0,
   persistStatus: "idle",
@@ -86,6 +90,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       live: createInitialLiveState(scenario.id),
       replaySamples: [],
       autonomyEvaluation: null,
+      lastAutonomyUpload: get().lastAutonomyUpload,
       sensorFrame: null,
       lastRecordedAt: 0,
       persistStatus: "idle",
@@ -100,6 +105,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       live: createInitialLiveState(activeId),
       replaySamples: [],
       autonomyEvaluation: null,
+      lastAutonomyUpload: get().lastAutonomyUpload,
       sensorFrame: null,
       lastRecordedAt: 0,
       persistStatus: "idle",
@@ -113,6 +119,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
       replaySamples: [...state.replaySamples.slice(-399), sample],
     })),
   setAutonomyEvaluation: (autonomyEvaluation) => set({ autonomyEvaluation }),
+  setLastAutonomyUpload: (lastAutonomyUpload) => set({ lastAutonomyUpload }),
   setLastRecordedAt: (time) => set({ lastRecordedAt: time }),
   setSensorFrame: (frame) => set({ sensorFrame: frame }),
   setPersistStatus: (status, message = null) =>

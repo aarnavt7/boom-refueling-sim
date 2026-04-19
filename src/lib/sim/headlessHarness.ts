@@ -1,5 +1,6 @@
 import { getReceiverReceptacleWorld, getTankerPose } from "@/lib/sim/aircraftAttachments";
 import { applyAutopilotCommand, toAutopilotCommandECEF } from "@/lib/sim/autopilot";
+import { applyAutonomyOutputToPose } from "@/lib/sim/autonomyUpload";
 import {
   EMPTY_METRICS,
   EMPTY_SAFETY,
@@ -12,10 +13,17 @@ import { getBoomTipPose } from "@/lib/sim/kinematics";
 import { computeMetrics } from "@/lib/sim/metrics";
 import { sampleReceiverPose } from "@/lib/sim/motion";
 import { runPassivePerception } from "@/lib/sim/perception";
+import { createReplaySample } from "@/lib/sim/replay";
 import { evaluateSafety } from "@/lib/sim/safety";
 import { getScenarioById } from "@/lib/sim/scenarios";
 import { updateTracker } from "@/lib/sim/tracker";
-import type { ControllerState, ScenarioPreset, SimMetrics } from "@/lib/sim/types";
+import type {
+  AutonomyControllerOutput,
+  ControllerState,
+  ReplaySample,
+  ScenarioPreset,
+  SimMetrics,
+} from "@/lib/sim/types";
 
 type StateFrameCounts = Partial<Record<ControllerState, number>>;
 
@@ -31,6 +39,8 @@ export type HeadlessRunOptions = {
   dt?: number;
   stopOnDocked?: boolean;
   manualAbortAt?: number | null;
+  collectReplay?: boolean;
+  autonomyOutputs?: Array<AutonomyControllerOutput | null>;
 };
 
 export type HeadlessRunSummary = {
@@ -53,6 +63,7 @@ export type HeadlessRunSummary = {
   peakLateralError: number;
   maxSensorDisagreement: number;
   dropoutRate: number;
+  replaySamples: ReplaySample[];
 };
 
 export function runHeadlessScenario({
@@ -62,6 +73,8 @@ export function runHeadlessScenario({
   dt = 1 / 60,
   stopOnDocked = false,
   manualAbortAt = null,
+  collectReplay = false,
+  autonomyOutputs = [],
 }: HeadlessRunOptions = {}): HeadlessRunSummary {
   const scenario = inputScenario ?? getScenarioById(scenarioId);
   const totalFrames = Math.ceil(durationSeconds / dt);
@@ -86,11 +99,15 @@ export function runHeadlessScenario({
   let peakPositionError = 0;
   let peakLateralError = 0;
   let maxSensorDisagreement = 0;
+  const replaySamples: ReplaySample[] = [];
 
   for (let frame = 0; frame < totalFrames; frame += 1) {
     framesSimulated = frame + 1;
     const simTime = framesSimulated * dt;
-    const receiverPose = sampleReceiverPose(simTime, scenario);
+    const receiverPose = applyAutonomyOutputToPose(
+      sampleReceiverPose(simTime, scenario),
+      autonomyOutputs[frame] ?? null,
+    );
     const targetPose = {
       position: getReceiverReceptacleWorld(receiverPose),
       rotation: receiverPose.rotation,
@@ -200,13 +217,74 @@ export function runHeadlessScenario({
     if (controllerState === "MATED" && dockedAt === null) {
       dockedAt = simTime;
       if (stopOnDocked) {
+        if (collectReplay) {
+          replaySamples.push(
+            createReplaySample({
+              simTime,
+              frame: framesSimulated,
+              receiverPose,
+              targetPose,
+              boom,
+              autopilotCommand,
+              command: plant.command,
+              controllerState,
+              sensorObservations: perception.observations,
+              estimate: perception.estimate,
+              tracker,
+              safety,
+              metrics,
+              abortReason,
+            }),
+          );
+        }
         break;
       }
     }
 
     if (controllerState === "ABORT" || controllerState === "BREAKAWAY") {
       abortReason = safety.reasons[0] ?? abortReason;
+      if (collectReplay) {
+        replaySamples.push(
+          createReplaySample({
+            simTime,
+            frame: framesSimulated,
+            receiverPose,
+            targetPose,
+            boom,
+            autopilotCommand,
+            command: plant.command,
+            controllerState,
+            sensorObservations: perception.observations,
+            estimate: perception.estimate,
+            tracker,
+            safety,
+            metrics,
+            abortReason,
+          }),
+        );
+      }
       break;
+    }
+
+    if (collectReplay) {
+      replaySamples.push(
+          createReplaySample({
+            simTime,
+            frame: framesSimulated,
+            receiverPose,
+            targetPose,
+            boom,
+          autopilotCommand,
+          command: plant.command,
+          controllerState,
+          sensorObservations: perception.observations,
+          estimate: perception.estimate,
+          tracker,
+          safety,
+          metrics,
+          abortReason,
+        }),
+      );
     }
   }
 
@@ -230,6 +308,7 @@ export function runHeadlessScenario({
     peakLateralError,
     maxSensorDisagreement,
     dropoutRate: dropoutCount / Math.max(framesSimulated * SENSOR_RIGS.length, 1),
+    replaySamples,
   };
 }
 

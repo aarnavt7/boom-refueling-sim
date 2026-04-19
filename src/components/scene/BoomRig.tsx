@@ -1,32 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
 import type * as THREE from "three";
 
 import { BoomRigGeometry } from "@/components/scene/BoomRigGeometry";
 import { SensorCamera } from "@/components/scene/SensorCamera";
 import { getSensorRigById } from "@/lib/sim/perception";
-import { getDisplayedState } from "@/lib/sim/replay";
-import { useSimStore } from "@/lib/store/simStore";
-import { useUiStore } from "@/lib/store/uiStore";
+import type { SensorMountId } from "@/lib/sim/types";
 
 type BoomRigProps = {
   sensorCameraRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  sensorMountId: SensorMountId;
+  boom: {
+    yaw: number;
+    pitch: number;
+    extend: number;
+  };
 };
 
-export function BoomRig({ sensorCameraRef }: BoomRigProps) {
-  const live = useSimStore((state) => state.live);
-  const replaySamples = useSimStore((state) => state.replaySamples);
-  const replayMode = useUiStore((state) => state.replayMode);
-  const replayIndex = useUiStore((state) => state.replayIndex);
-
-  const displayed = useMemo(
-    () => getDisplayedState(live, replaySamples, replayMode, replayIndex),
-    [live, replaySamples, replayMode, replayIndex],
-  );
-
-  const { boom } = displayed;
-  const activeSensor = getSensorRigById(displayed.estimate.sensorId);
+export function BoomRig({ sensorCameraRef, sensorMountId, boom }: BoomRigProps) {
+  const activeSensor = getSensorRigById(sensorMountId);
   const terminalSensorLocal = {
     x: activeSensor.localOffset.x,
     y: activeSensor.localOffset.y,

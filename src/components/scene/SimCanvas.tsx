@@ -19,9 +19,13 @@ import {
   type OuterEnvironmentVariant,
 } from "@/components/scene/OuterEnvironment";
 import { Receiver } from "@/components/scene/Receiver";
+import { RefuelLinkEffect } from "@/components/scene/RefuelLinkEffect";
 import { SceneLighting } from "@/components/scene/SceneLighting";
 import { SimContentLayer } from "@/components/scene/SimContentLayer";
 import { TankerAssembly } from "@/components/scene/TankerAssembly";
+import { GamepadCameraRig } from "@/components/scene/GamepadCameraRig";
+import { TrackingCameraRig } from "@/components/scene/TrackingCameraRig";
+import { TrackingOverlays } from "@/components/scene/TrackingOverlays";
 import { TutorialCameraRig } from "@/components/scene/TutorialCameraRig";
 import {
   CAPTURE_CANVAS_CLEAR,
@@ -54,7 +58,9 @@ import {
 import { createSensorRenderTarget, readSensorFrame } from "@/lib/sim/renderTarget";
 import { evaluateSafety } from "@/lib/sim/safety";
 import { SIM_CONTENT_LAYER } from "@/lib/sim/sceneLayers";
+import { getSensorViewportRenderKey, resolveSensorViewportFeed } from "@/lib/sim/sensorViewport";
 import { updateTracker } from "@/lib/sim/tracker";
+import { useDisplayedReplayBundle } from "@/lib/sim/useDisplayedReplayBundle";
 import { isCaptureSimDriverActive, registerCaptureSimDriver } from "@/lib/sim/simDriver";
 import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import { useSimStore } from "@/lib/store/simStore";
@@ -95,7 +101,39 @@ function SimulationWorld({
   const gl = useThree((state) => state.gl);
   const captureAccumulator = useRef(0);
   const replayAccumulator = useRef(0);
+  const lastSensorRenderKeyRef = useRef<string | null>(null);
   const allowOrbitControls = useOnboardingStore((state) => state.allowOrbitControls);
+  const cameraMode = useUiStore((state) => state.cameraMode);
+  const replayMode = useUiStore((state) => state.replayMode);
+  const replayDataSource = useUiStore((state) => state.replayDataSource);
+  const evaluationView = useUiStore((state) => state.evaluationView);
+  const replayIndex = useUiStore((state) => state.replayIndex);
+  const sensorViewportSource = useUiStore((state) => state.sensorViewportSource);
+  const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
+  const replaySamples = useSimStore((state) => state.replaySamples);
+  const autonomyEvaluation = useSimStore((state) => state.autonomyEvaluation);
+  const displayed = useDisplayedReplayBundle().primary;
+  const viewportFeed = resolveSensorViewportFeed({
+    state: displayed,
+    source: sensorViewportSource,
+    modality: sensorViewportModality,
+  });
+  const sensorViewportRenderKey = getSensorViewportRenderKey({
+    state: displayed,
+    source: sensorViewportSource,
+    modality: sensorViewportModality,
+    replayMode,
+    replayIndex,
+    replayDataSource,
+    evaluationView,
+  });
+  const activeReplaySampleCount =
+    replayDataSource === "autonomy" && autonomyEvaluation
+      ? Math.max(
+          autonomyEvaluation.baselineReplaySamples.length,
+          autonomyEvaluation.uploadedReplaySamples.length,
+        )
+      : replaySamples.length;
 
   useFrame((_, delta) => {
     if (simVariant === "landing" && isCaptureSimDriverActive()) {
@@ -104,6 +142,7 @@ function SimulationWorld({
 
     const uiState = useUiStore.getState();
     const simState = useSimStore.getState();
+    const sensorViewportChanged = lastSensorRenderKeyRef.current !== sensorViewportRenderKey;
 
     const refreshSensorFrame = (forceRead = false) => {
       const sensorCamera = sensorCameraRef.current;
@@ -127,25 +166,28 @@ function SimulationWorld({
 
       captureAccumulator.current = 0;
       simState.setSensorFrame(readSensorFrame(gl, sensorTarget, SENSOR_RESOLUTION, SENSOR_RESOLUTION));
+      lastSensorRenderKeyRef.current = sensorViewportRenderKey;
     };
 
     if (uiState.simFrozen) {
       /** Physics are paused but keep refreshing the sensor RTT read so the PIP stays valid (not stuck black). */
-      refreshSensorFrame(true);
+      refreshSensorFrame(sensorViewportChanged || uiState.simFrozen);
       return;
     }
 
     if (uiState.replayMode) {
-      if (!uiState.replayPlaying || simState.replaySamples.length === 0) {
+      refreshSensorFrame(sensorViewportChanged || !uiState.replayPlaying);
+
+      if (!uiState.replayPlaying || activeReplaySampleCount === 0) {
         return;
       }
 
       replayAccumulator.current += delta;
       if (replayAccumulator.current >= 1 / 20) {
         replayAccumulator.current = 0;
-        const nextIndex = clampReplayIndex(uiState.replayIndex + 1, simState.replaySamples.length);
+        const nextIndex = clampReplayIndex(uiState.replayIndex + 1, activeReplaySampleCount);
         useUiStore.getState().setReplayIndex(nextIndex);
-        if (nextIndex === simState.replaySamples.length - 1) {
+        if (nextIndex === activeReplaySampleCount - 1) {
           useUiStore.getState().setReplayPlaying(false);
         }
       }
@@ -153,7 +195,7 @@ function SimulationWorld({
     }
 
     if (simVariant === "sim" && uiState.liveRunState !== "running") {
-      if (simState.sensorFrame === null) {
+      if (simState.sensorFrame === null || sensorViewportChanged) {
         refreshSensorFrame(true);
       }
       return;
@@ -178,7 +220,7 @@ function SimulationWorld({
       simTime,
     });
     const estimate = perception.estimate;
-    refreshSensorFrame();
+    refreshSensorFrame(sensorViewportChanged);
 
     const tracker = updateTracker(previous.tracker, perception.observations, dt);
     const boomTipBefore = getBoomTipPose(previous.boom).position;
@@ -289,8 +331,18 @@ function SimulationWorld({
       <OuterEnvironment variant={environmentVariant} />
       <SceneLighting />
       <SimContentLayer>
-        <TankerAssembly sensorCameraRef={sensorCameraRef} />
+        <TankerAssembly
+          sensorCameraRef={sensorCameraRef}
+          sensorViewportSensorId={viewportFeed.effectiveSensorId}
+          boom={displayed.boom}
+        />
         <Receiver />
+        {simVariant === "sim" ? (
+          <>
+            <RefuelLinkEffect />
+            <TrackingOverlays />
+          </>
+        ) : null}
       </SimContentLayer>
       <DebugHelpers />
       {environmentVariant === "landing" ? (
@@ -300,13 +352,15 @@ function SimulationWorld({
       ) : (
         <>
           <OrbitControls
-            enabled={allowOrbitControls}
+            enabled={allowOrbitControls && cameraMode === "manual"}
             makeDefault
             target={[MAIN_CAMERA_TARGET.x, MAIN_CAMERA_TARGET.y, MAIN_CAMERA_TARGET.z]}
             minDistance={9}
             maxDistance={38}
             maxPolarAngle={Math.PI * 0.46}
           />
+          <TrackingCameraRig />
+          <GamepadCameraRig />
           <TutorialCameraRig />
         </>
       )}

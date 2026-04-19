@@ -8,9 +8,12 @@ import { getBoomMountLocalPosition, getTankerPose } from "@/lib/sim/aircraftAtta
 import {
   TANKER_ATTACHMENT_CONFIG,
 } from "@/lib/sim/aircraftVisualConfig";
+import type { BoomJointState, SensorMountId } from "@/lib/sim/types";
 
 type TankerAssemblyProps = {
   sensorCameraRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  sensorViewportSensorId: SensorMountId;
+  boom: BoomJointState;
 };
 
 function BoomMountFairing() {
@@ -115,7 +118,11 @@ function BoomMountFairing() {
   );
 }
 
-export function TankerAssembly({ sensorCameraRef }: TankerAssemblyProps) {
+export function TankerAssembly({
+  sensorCameraRef,
+  sensorViewportSensorId,
+  boom,
+}: TankerAssemblyProps) {
   const tankerPose = getTankerPose();
   const boomRoot = getBoomMountLocalPosition();
 
@@ -135,7 +142,11 @@ export function TankerAssembly({ sensorCameraRef }: TankerAssemblyProps) {
       <Tanker />
       <BoomMountFairing />
       <group position={[boomRoot.x, boomRoot.y, boomRoot.z]}>
-        <BoomRig sensorCameraRef={sensorCameraRef} />
+        <BoomRig
+          sensorCameraRef={sensorCameraRef}
+          sensorMountId={sensorViewportSensorId}
+          boom={boom}
+        />
       </group>
     </group>
   );

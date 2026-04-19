@@ -119,3 +119,54 @@ describe("headless safety and negative cases", () => {
     expect(result.firstStateAt.MATED).toBeUndefined();
   });
 });
+
+describe("headless autonomy perturbations", () => {
+  test("uploaded motion perturbations create a measurably different yet deterministic replay", () => {
+    const baseline = runHeadlessScenario({
+      scenarioId: "steady-approach",
+      durationSeconds: 8,
+      dt: DT,
+      collectReplay: true,
+    });
+    const perturbations = baseline.replaySamples.map((sample, index) =>
+      index >= 45 && index <= 120
+        ? {
+            positionDelta: {
+              x: 0.024,
+              y: 0.012,
+              z: 0,
+            },
+          }
+        : null,
+    );
+
+    const uploadedA = runHeadlessScenario({
+      scenarioId: "steady-approach",
+      durationSeconds: 8,
+      dt: DT,
+      collectReplay: true,
+      autonomyOutputs: perturbations,
+    });
+    const uploadedB = runHeadlessScenario({
+      scenarioId: "steady-approach",
+      durationSeconds: 8,
+      dt: DT,
+      collectReplay: true,
+      autonomyOutputs: perturbations,
+    });
+    const diverged = uploadedA.replaySamples.some((sample, index) => {
+      const reference = baseline.replaySamples[index];
+      return (
+        reference !== undefined &&
+        Math.abs(sample.receiverPose.position.x - reference.receiverPose.position.x) > 0.01
+      );
+    });
+
+    expect(diverged).toBe(true);
+    expect(uploadedA.finalMetrics.positionError).toBeCloseTo(
+      uploadedB.finalMetrics.positionError,
+      10,
+    );
+    expectStableNullableNumber(uploadedA.dockedAt, uploadedB.dockedAt, 10);
+  });
+});

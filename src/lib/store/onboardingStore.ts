@@ -12,7 +12,7 @@ import {
   type OrientationTourStepId,
 } from "@/lib/onboarding/tourConfig";
 
-export const ONBOARDING_VERSION = 3;
+export const ONBOARDING_VERSION = 4;
 export const ONBOARDING_STORAGE_KEY = "boom.sim.onboarding";
 
 export type OnboardingStatus =
@@ -124,9 +124,9 @@ function createChecklist(completedIds: readonly OnboardingChecklistId[] = []) {
 function createDefaultState() {
   return {
     version: ONBOARDING_VERSION,
-    status: "idle" as const,
+    status: "welcome" as const,
     checklist: createChecklist(),
-    isOpen: true,
+    isOpen: false,
     isDismissed: false,
     hasCompleted: false,
     allowOrbitControls: true,

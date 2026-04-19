@@ -17,6 +17,25 @@ export type Euler3 = {
 
 export type CameraMode = "manual" | "receiver-lock" | "dock-lock";
 
+export type GamepadDeviceType = "none" | "xbox" | "standard-gamepad";
+
+export type GamepadUiMode = "viewport" | "hud" | "overlay";
+
+export type GamepadAction =
+  | "confirm"
+  | "back"
+  | "context"
+  | "cycleCamera"
+  | "groupPrev"
+  | "groupNext"
+  | "recenter"
+  | "moveUp"
+  | "moveDown"
+  | "moveLeft"
+  | "moveRight"
+  | "zoomIn"
+  | "zoomOut";
+
 export type ReplayDataSource = "session" | "autonomy";
 
 export type EvaluationView = "baseline" | "uploaded" | "overlay";
@@ -47,6 +66,10 @@ export type SensorMountId =
 export type SensorRole = "acquire" | "terminal";
 
 export type SensorModality = "visible" | "thermal";
+
+export type SensorViewportSource = "auto" | SensorMountId;
+
+export type SensorViewportModality = "auto" | SensorModality;
 
 export type ControllerState =
   | "SEARCH"

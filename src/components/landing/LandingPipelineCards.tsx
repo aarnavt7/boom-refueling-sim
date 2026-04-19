@@ -1,8 +1,8 @@
 const pipeline = [
   {
     step: "01",
-    title: "Scenario",
-    body: "Pick motion preset — tanker, receiver, boom base.",
+    title: "Mission setup",
+    body: "Pick the aircraft card, scenario, camera lock, and optional autonomy upload before launch.",
     icon: "scan",
   },
   {
@@ -19,8 +19,8 @@ const pipeline = [
   },
   {
     step: "04",
-    title: "Replay",
-    body: "Scrub samples; keep local run summaries and replay archives.",
+    title: "Debrief",
+    body: "Compare baseline, uploaded, and overlay replays with offset, closure, confidence, and safety analytics.",
     icon: "timeline",
   },
 ] as const;

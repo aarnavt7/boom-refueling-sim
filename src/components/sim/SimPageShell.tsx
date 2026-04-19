@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { GamepadProvider } from "@/components/gamepad/GamepadProvider";
 import { DockingHud } from "@/components/hud/DockingHud";
 import { OnboardingProvider } from "@/components/onboarding/OnboardingProvider";
 import { SimCanvas } from "@/components/scene/SimCanvas";
@@ -25,6 +26,8 @@ function SimBootLoader() {
   );
 }
 
+const SIM_BOOT_FAILSAFE_MS = 3500;
+
 /**
  * Dark first paint + minimal boot overlay until env/HDR report ready (see `LandingSceneReadyNotifier`).
  */
@@ -33,6 +36,18 @@ export function SimPageShell() {
   const onSimReady = useCallback(() => {
     setSimReady(true);
   }, []);
+
+  useEffect(() => {
+    if (simReady) {
+      return;
+    }
+
+    const id = window.setTimeout(() => {
+      setSimReady(true);
+    }, SIM_BOOT_FAILSAFE_MS);
+
+    return () => window.clearTimeout(id);
+  }, [simReady]);
 
   return (
     <main className="relative m-0 h-[100dvh] min-h-[100dvh] w-full overflow-hidden bg-[#0a0a0c] p-0 text-[color:var(--hud-fg)]">
@@ -47,8 +62,10 @@ export function SimPageShell() {
         <SimBootLoader />
       </div>
       <OnboardingProvider>
-        <SimCanvas onSimReady={onSimReady} />
-        <DockingHud />
+        <GamepadProvider>
+          <SimCanvas onSimReady={onSimReady} />
+          <DockingHud />
+        </GamepadProvider>
       </OnboardingProvider>
     </main>
   );

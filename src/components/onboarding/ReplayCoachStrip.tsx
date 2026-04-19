@@ -77,12 +77,28 @@ export function ReplayCoachStrip({
             {primaryActionLabel || secondaryActionLabel ? (
               <div className="flex flex-wrap gap-2">
                 {primaryActionLabel && onPrimaryAction ? (
-                  <HudButton variant="primary" onClick={onPrimaryAction}>
+                  <HudButton
+                    variant="primary"
+                    data-gamepad-focus-id="replay-coach-primary"
+                    data-gamepad-group="replay-coach"
+                    data-gamepad-scope="overlay"
+                    data-gamepad-label={primaryActionLabel}
+                    data-gamepad-default="true"
+                    onClick={onPrimaryAction}
+                  >
                     {primaryActionLabel}
                   </HudButton>
                 ) : null}
                 {secondaryActionLabel && onSecondaryAction ? (
-                  <HudButton variant="ghost" onClick={onSecondaryAction}>
+                  <HudButton
+                    variant="ghost"
+                    data-gamepad-focus-id="replay-coach-secondary"
+                    data-gamepad-group="replay-coach"
+                    data-gamepad-scope="overlay"
+                    data-gamepad-label={secondaryActionLabel}
+                    data-gamepad-back-action="true"
+                    onClick={onSecondaryAction}
+                  >
                     {secondaryActionLabel}
                   </HudButton>
                 ) : null}

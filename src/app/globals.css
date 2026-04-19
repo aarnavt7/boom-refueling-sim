@@ -148,6 +148,35 @@ input {
   outline-offset: 1px;
 }
 
+[data-gamepad-focused="true"] {
+  outline: 2px solid color-mix(in srgb, var(--hud-accent) 72%, transparent);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 1px rgba(227, 107, 23, 0.22),
+    0 0 24px rgba(227, 107, 23, 0.18);
+}
+
+.tactical-file {
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, var(--hud-line) 92%, transparent);
+  border-radius: calc(var(--hud-radius-control) + 2px);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--hud-fg);
+  padding: 0.55rem 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.tactical-file::file-selector-button {
+  margin-right: 0.6rem;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius-control);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--hud-fg);
+  padding: 0.32rem 0.55rem;
+  font: inherit;
+}
+
 input[type="range"].tactical-range {
   -webkit-appearance: none;
   appearance: none;
@@ -252,4 +281,23 @@ input[type="range"].tactical-range::-moz-range-thumb {
 
 .animate-onboarding-fade-up {
   animation: onboarding-fade-up 0.16s ease-out forwards;
+}
+
+@keyframes sergeant-launcher-pulse {
+  0% {
+    opacity: 0.28;
+    transform: scale(0.88);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+.sergeant-launcher__pulse {
+  animation: sergeant-launcher-pulse 1.9s ease-out infinite;
 }

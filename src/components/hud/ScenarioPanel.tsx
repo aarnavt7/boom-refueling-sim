@@ -1,7 +1,12 @@
 "use client";
 
+import { CycleControl } from "@/components/hud/CycleControl";
 import { formatControllerStateLabel } from "@/components/hud/controllerPresentation";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
+import {
+  AIRCRAFT_CARD_OPTIONS,
+  CAMERA_MODE_OPTIONS,
+} from "@/lib/sim/autonomyCatalog";
 import { scenarioPresets } from "@/lib/sim/scenarios";
 import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import { useSimStore } from "@/lib/store/simStore";
@@ -9,9 +14,12 @@ import { useUiStore } from "@/lib/store/uiStore";
 
 export function ScenarioPanel() {
   const selectedScenarioId = useUiStore((state) => state.selectedScenarioId);
+  const selectedAircraftCardId = useUiStore((state) => state.selectedAircraftCardId);
+  const cameraMode = useUiStore((state) => state.cameraMode);
   const showDebug = useUiStore((state) => state.showDebug);
   const liveRunState = useUiStore((state) => state.liveRunState);
   const setScenarioId = useUiStore((state) => state.setScenarioId);
+  const setCameraMode = useUiStore((state) => state.setCameraMode);
   const toggleDebug = useUiStore((state) => state.toggleDebug);
   const startLiveRun = useUiStore((state) => state.startLiveRun);
   const pauseLiveRun = useUiStore((state) => state.pauseLiveRun);
@@ -32,6 +40,9 @@ export function ScenarioPanel() {
 
   const selectedScenario =
     scenarioPresets.find((scenario) => scenario.id === selectedScenarioId) ?? scenarioPresets[0];
+  const selectedAircraftCard =
+    AIRCRAFT_CARD_OPTIONS.find((option) => option.id === selectedAircraftCardId) ??
+    AIRCRAFT_CARD_OPTIONS[0];
   const isMissionLocked =
     (onboardingStatus === "guided-run" || onboardingStatus === "replay-debrief") &&
     !onboardingDismissed &&
@@ -66,6 +77,34 @@ export function ScenarioPanel() {
     { label: "Water", supported: selectedScenario.mission.supportsWater },
     { label: "EMCON", supported: selectedScenario.mission.supportsEmcon },
   ];
+  const selectedScenarioIndex = scenarioPresets.findIndex((scenario) => scenario.id === selectedScenario.id);
+  const selectedCameraIndex = CAMERA_MODE_OPTIONS.findIndex((option) => option.id === cameraMode);
+
+  function applyScenarioChange(nextId: string) {
+    setScenarioId(nextId);
+    setReplayMode(false);
+    setReplayPlaying(false);
+    setReplayIndex(0);
+    clearManualAbort();
+    stopLiveRun();
+    setScenarioById(nextId);
+  }
+
+  function cycleScenario(delta: number) {
+    const safeIndex = selectedScenarioIndex === -1 ? 0 : selectedScenarioIndex;
+    const nextIndex =
+      (safeIndex + delta + scenarioPresets.length) % scenarioPresets.length;
+    applyScenarioChange(scenarioPresets[nextIndex]?.id ?? scenarioPresets[0].id);
+  }
+
+  function cycleCameraMode(delta: number) {
+    const safeIndex = selectedCameraIndex === -1 ? 0 : selectedCameraIndex;
+    const nextIndex =
+      (safeIndex + delta + CAMERA_MODE_OPTIONS.length) % CAMERA_MODE_OPTIONS.length;
+    const nextMode =
+      CAMERA_MODE_OPTIONS[nextIndex]?.id ?? CAMERA_MODE_OPTIONS[0].id;
+    setCameraMode(nextMode);
+  }
 
   return (
     <TacticalPanel
@@ -80,29 +119,31 @@ export function ScenarioPanel() {
       </p>
 
       <div className="px-3 py-2">
-        <label className="block font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-          Preset
-        </label>
-        <select
-          className="tactical-select mt-1.5"
-          value={selectedScenarioId}
-          onChange={(event) => {
-            const nextId = event.target.value;
-            setScenarioId(nextId);
-            setReplayMode(false);
-            setReplayPlaying(false);
-            setReplayIndex(0);
-            clearManualAbort();
-            stopLiveRun();
-            setScenarioById(nextId);
-          }}
-        >
-          {scenarioPresets.map((scenario) => (
-            <option key={scenario.id} value={scenario.id}>
-              {scenario.name}
-            </option>
-          ))}
-        </select>
+        <CycleControl
+          label="Preset"
+          valueLabel={selectedScenario.name}
+          detail={`${selectedScenario.description} Aircraft card · ${selectedAircraftCard.label}`}
+          onPrevious={() => cycleScenario(-1)}
+          onNext={() => cycleScenario(1)}
+          previousLabel="Previous preset"
+          nextLabel="Next preset"
+          gamepadBaseId="scenario-preset"
+          gamepadGroup="scenario-config"
+        />
+      </div>
+
+      <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
+        <CycleControl
+          label="Camera"
+          valueLabel={CAMERA_MODE_OPTIONS.find((option) => option.id === cameraMode)?.label ?? CAMERA_MODE_OPTIONS[0].label}
+          detail={CAMERA_MODE_OPTIONS.find((option) => option.id === cameraMode)?.detail ?? CAMERA_MODE_OPTIONS[0].detail}
+          onPrevious={() => cycleCameraMode(-1)}
+          onNext={() => cycleCameraMode(1)}
+          previousLabel="Previous camera mode"
+          nextLabel="Next camera mode"
+          gamepadBaseId="scenario-camera"
+          gamepadGroup="scenario-config"
+        />
       </div>
 
       <div data-tour="run-controls" className="border-t border-[color:var(--hud-line)] px-3 py-2">
@@ -120,6 +161,10 @@ export function ScenarioPanel() {
         <div className="mt-2 flex flex-wrap gap-2">
           <HudButton
             variant="primary"
+            data-gamepad-focus-id="run-start"
+            data-gamepad-group="scenario-run"
+            data-gamepad-label={replayMode ? "Start live run" : liveRunState === "paused" ? "Resume run" : "Start run"}
+            data-gamepad-default="true"
             disabled={isMissionLocked || (!replayMode && liveRunState === "running")}
             onClick={() => {
               setReplayMode(false);
@@ -140,6 +185,9 @@ export function ScenarioPanel() {
           </HudButton>
           <HudButton
             variant="ghost"
+            data-gamepad-focus-id="run-pause"
+            data-gamepad-group="scenario-run"
+            data-gamepad-label="Pause run"
             disabled={isMissionLocked || replayMode || liveRunState !== "running"}
             onClick={pauseLiveRun}
           >
@@ -147,6 +195,9 @@ export function ScenarioPanel() {
           </HudButton>
           <HudButton
             variant="ghost"
+            data-gamepad-focus-id="run-stop"
+            data-gamepad-group="scenario-run"
+            data-gamepad-label="Stop run"
             disabled={isMissionLocked || replayMode || liveRunState === "stopped"}
             onClick={() => {
               clearManualAbort();
@@ -215,6 +266,9 @@ export function ScenarioPanel() {
         <HudButton
           data-tour="scenario-reset-button"
           variant="ghost"
+          data-gamepad-focus-id="scenario-reset"
+          data-gamepad-group="scenario-actions"
+          data-gamepad-label="Reset setup"
           onClick={() => {
             setReplayMode(false);
             setReplayPlaying(false);
@@ -226,11 +280,21 @@ export function ScenarioPanel() {
         >
           Reset setup
         </HudButton>
-        <HudButton data-tour="scenario-debug-button" variant="ghost" onClick={toggleDebug}>
+        <HudButton
+          data-tour="scenario-debug-button"
+          variant="ghost"
+          data-gamepad-focus-id="scenario-debug"
+          data-gamepad-group="scenario-actions"
+          data-gamepad-label={showDebug ? "Disable debug" : "Enable debug"}
+          onClick={toggleDebug}
+        >
           {showDebug ? "Debug off" : "Debug on"}
         </HudButton>
         <HudButton
           variant="danger"
+          data-gamepad-focus-id="scenario-breakaway"
+          data-gamepad-group="scenario-actions"
+          data-gamepad-label={manualAbort ? "Breakaway queued" : "Manual breakaway"}
           disabled={manualAbort || replayMode || liveRunState !== "running" || isMissionLocked}
           onClick={requestManualAbort}
         >

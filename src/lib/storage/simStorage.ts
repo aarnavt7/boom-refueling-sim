@@ -5,8 +5,11 @@ import type {
   CameraMode,
   ControllerState,
   EvaluationView,
+  GamepadDeviceType,
   LiveSimState,
   ReplaySample,
+  SensorViewportModality,
+  SensorViewportSource,
   UploadedAutonomyManifest,
   ScenarioPreset,
 } from "@/lib/sim/types";
@@ -25,8 +28,12 @@ export type UserPrefs = {
   selectedScenarioId: string;
   selectedAircraftCardId: AircraftCardId;
   cameraMode: CameraMode;
+  sensorViewportSource: SensorViewportSource;
+  sensorViewportModality: SensorViewportModality;
   showDebug: boolean;
   evaluationView: EvaluationView;
+  lastInputDevice: GamepadDeviceType;
+  controllerHintsDismissed: boolean;
   lastAutonomyUpload: UploadedAutonomyManifest | null;
 };
 
@@ -121,7 +128,17 @@ function parseUserPrefs(value: unknown): UserPrefs | null {
     return null;
   }
 
-  const { selectedScenarioId, selectedAircraftCardId, cameraMode, showDebug, evaluationView } = value;
+  const {
+    selectedScenarioId,
+    selectedAircraftCardId,
+    cameraMode,
+    sensorViewportSource,
+    sensorViewportModality,
+    showDebug,
+    evaluationView,
+    lastInputDevice,
+    controllerHintsDismissed,
+  } = value;
   if (typeof selectedScenarioId !== "string" || typeof showDebug !== "boolean") {
     return null;
   }
@@ -136,11 +153,33 @@ function parseUserPrefs(value: unknown): UserPrefs | null {
       cameraMode === "manual" || cameraMode === "receiver-lock" || cameraMode === "dock-lock"
         ? (cameraMode as CameraMode)
         : DEFAULT_CAMERA_MODE,
+    sensorViewportSource:
+      sensorViewportSource === "auto" ||
+      sensorViewportSource === "tail-acq-left" ||
+      sensorViewportSource === "tail-acq-right" ||
+      sensorViewportSource === "boom-term-left" ||
+      sensorViewportSource === "boom-term-right"
+        ? (sensorViewportSource as SensorViewportSource)
+        : "auto",
+    sensorViewportModality:
+      sensorViewportModality === "auto" ||
+      sensorViewportModality === "visible" ||
+      sensorViewportModality === "thermal"
+        ? (sensorViewportModality as SensorViewportModality)
+        : "auto",
     showDebug,
     evaluationView:
       evaluationView === "baseline" || evaluationView === "uploaded" || evaluationView === "overlay"
         ? (evaluationView as EvaluationView)
         : "baseline",
+    lastInputDevice:
+      lastInputDevice === "xbox" ||
+      lastInputDevice === "standard-gamepad" ||
+      lastInputDevice === "none"
+        ? (lastInputDevice as GamepadDeviceType)
+        : "none",
+    controllerHintsDismissed:
+      typeof controllerHintsDismissed === "boolean" ? controllerHintsDismissed : false,
     lastAutonomyUpload: parseUploadedAutonomyManifest(value.lastAutonomyUpload),
   };
 }
