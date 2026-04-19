@@ -9,8 +9,6 @@ The boom flys, you can see synthetic camera feeds, and replay runs.
 Build w/ Nextj, React Three Fiber, Three.js
 -based **3D aerial refueling boom** simulator: fly the boom, watch the synthetic camera feed, and replay runs. Built with **Next.js**, **React Three Fiber**, and **Three.js**.
 
-Repo: github.com/aarnavt7/boom-refueling-sim](https://github.com/aarnavt7/boom-refueling-sim)
-
 
 ## Features
 
