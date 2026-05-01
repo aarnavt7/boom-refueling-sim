@@ -1,6 +1,5 @@
 "use client";
 
-import { formatMoveECEF } from "@/lib/sim/autopilot";
 import { KvTable, TacticalPanel } from "@/components/hud/tactical-ui";
 import type { LiveSimState } from "@/lib/sim/types";
 import type { ReactNode } from "react";
@@ -8,44 +7,48 @@ import type { ReactNode } from "react";
 type MetricsPanelProps = {
   state: LiveSimState;
   className?: string;
+  bodyClassName?: string;
+  scrollBody?: boolean;
+  headerActions?: ReactNode;
   panelDragHandle?: ReactNode;
 };
 
-export function MetricsPanel({ state, className = "min-h-0 lg:h-full", panelDragHandle }: MetricsPanelProps) {
+export function MetricsPanel({
+  state,
+  className = "min-h-0 lg:h-full",
+  bodyClassName = "",
+  scrollBody = true,
+  headerActions,
+  panelDragHandle,
+}: MetricsPanelProps) {
+  const profileLabel =
+    state.journey?.assistiveMode === "low-vision" ? "Low-vision mode" : "Blind mode";
   const rows = [
-    { k: "Pos err", v: `${state.metrics.positionError.toFixed(3)} m` },
-    { k: "Lat err", v: `${state.metrics.lateralError.toFixed(3)} m` },
-    { k: "Fwd err", v: `${state.metrics.forwardError.toFixed(3)} m` },
-    { k: "Closure", v: `${state.metrics.closureRate.toFixed(3)} m/s` },
-    { k: "Mate score", v: `${(state.metrics.dockScore * 100).toFixed(1)} %` },
-    { k: "Sensor mode", v: `${state.estimate.sensorName} · ${state.estimate.modality}` },
-    { k: "Track role", v: `${state.tracker.preferredRole} · ${state.tracker.activeSensorIds.length} active` },
-    { k: "Disagree", v: `${state.metrics.sensorDisagreement.toFixed(3)} m`, warn: state.metrics.sensorDisagreement > 0.4 },
-    { k: "Track rng", v: `${state.metrics.trackRange.toFixed(2)} m` },
-    { k: "Yaw", v: `${state.boom.yaw.toFixed(3)} rad` },
-    { k: "Pitch", v: `${state.boom.pitch.toFixed(3)} rad` },
-    { k: "Extend", v: `${state.boom.extend.toFixed(2)} m` },
-    { k: "moveECEF", v: formatMoveECEF(state.autopilotCommand) },
-    { k: "Cmd mag", v: `${(state.metrics.commandMagnitude * 100).toFixed(1)} cm` },
-    { k: "Yaw rate", v: `${state.command.yawRate.toFixed(3)} rad/s` },
-    { k: "Pitch rate", v: `${state.command.pitchRate.toFixed(3)} rad/s` },
-    { k: "Ext rate", v: `${state.command.extendRate.toFixed(3)} m/s` },
-    {
-      k: "Fused conf",
-      v: `${(state.tracker.confidence * 100).toFixed(0)} %`,
-      warn: state.tracker.confidence < 0.35,
-    },
-    { k: "Dropouts", v: String(state.metrics.dropoutCount), warn: state.metrics.dropoutCount > 0 },
-    { k: "Visible", v: `${state.metrics.visibleTime.toFixed(1)} s` },
+    { k: "Distance left", v: `${(state.metrics.distanceRemaining ?? 0).toFixed(1)} m` },
+    { k: "Route drift", v: `${state.metrics.positionError.toFixed(2)} m`, warn: state.metrics.positionError > 0.8 },
+    { k: "Travel pace", v: `${state.metrics.closureRate.toFixed(2)} m/s` },
+    { k: "Progress", v: `${((state.metrics.travelProgress ?? 0) * 100).toFixed(0)} %` },
+    { k: "Confidence", v: `${(state.metrics.confidence * 100).toFixed(0)} %`, warn: state.metrics.confidence < 0.7 },
+    { k: "Route clarity", v: `${((state.metrics.routeClarity ?? 0) * 100).toFixed(0)} %`, warn: (state.metrics.routeClarity ?? 1) < 0.58 },
+    { k: "Access score", v: `${((state.metrics.accessibilityScore ?? 0) * 100).toFixed(0)} %` },
+    { k: "Hazard load", v: `${(state.metrics.hazardExposure ?? 0).toFixed(2)}`, warn: (state.metrics.hazardExposure ?? 0) > 2.4 },
+    { k: "Landmarks", v: `${(state.metrics.landmarkCoverage ?? 0).toFixed(1)} pts` },
+    { k: "Corrections", v: String(state.metrics.correctionCount ?? 0), warn: (state.metrics.correctionCount ?? 0) > 2 },
+    { k: "Reroutes", v: String(state.metrics.rerouteCount ?? 0), warn: (state.metrics.rerouteCount ?? 0) > 0 },
+    { k: "Off-route", v: String(state.metrics.offRouteEvents ?? 0), warn: (state.metrics.offRouteEvents ?? 0) > 0 },
+    { k: "Output mode", v: `${profileLabel} · ${state.journey?.guidancePrompt.previewLabel ?? "Assistive preview"}` },
+    { k: "Next cue", v: `${state.journey?.guidancePrompt.clockHint ?? "Pending"} · ${state.journey?.guidancePrompt.distanceLabel ?? "Pending"}` },
   ];
 
   return (
     <TacticalPanel
       data-tour="telemetry-panel"
       className={className}
-      scrollBody
-      title="Telemetry"
-      subtitle="Boom pose, errors, commands"
+      bodyClassName={bodyClassName}
+      scrollBody={scrollBody}
+      title="Access Metrics"
+      subtitle="Clarity, hazards, corrections"
+      headerActions={headerActions}
       panelDragHandle={panelDragHandle}
       headerRight={
         <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
@@ -56,13 +59,13 @@ export function MetricsPanel({ state, className = "min-h-0 lg:h-full", panelDrag
       <KvTable rows={rows} />
       <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
         <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-          Safety + emission state
+          Guidance quality
         </p>
         <p className="mt-1 font-sans text-[11px] leading-snug text-[color:var(--hud-fg)]">
-          {state.safety.reasons.length > 0 ? state.safety.reasons.join(" · ") : "Within envelope · no holds"}
+          {state.journey?.notes.length ? state.journey.notes.join(" · ") : "The route is stable and confidence-first."}
         </p>
         <p className="mt-1 font-sans text-[11px] leading-snug text-[color:var(--hud-muted)]">
-          {state.estimate.notes.join(" · ")}
+          {state.journey?.guidancePrompt.safetyNote ?? "Prompts will surface safety notes here when the route changes."}
         </p>
       </div>
     </TacticalPanel>

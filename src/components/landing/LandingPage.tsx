@@ -12,24 +12,24 @@ const techLayers = [
   { name: "Runtime", detail: "Bun, Next.js App Router, TypeScript." },
   { name: "3D", detail: "React Three Fiber, drei, capped DPR." },
   { name: "State", detail: "Zustand for sim + UI." },
-  { name: "Perception", detail: "Passive visible / thermal sensor suite + fused receptacle tracking." },
-  { name: "Safety", detail: "ECEF autopilot commands, limits, hold / abort / breakaway logic." },
-  { name: "Autonomy eval", detail: "Client-side upload worker, overlay replay, and post-run offset analytics." },
+  { name: "Routing", detail: "Weighted pathfinding with landmark clarity, hazard load, crowd pressure, and low-vision penalties." },
+  { name: "Guidance", detail: "Clock-direction prompts, landmark callouts, reroute notes, and low-vision scene treatment." },
+  { name: "Compare", detail: "Baseline vs Pathlight replay overlays and before/after accessibility metrics." },
   { name: "Save", detail: "localStorage summaries + IndexedDB replay archives." },
 ];
 
 const mathCards = [
   {
-    title: "Geometry",
-    body: "The controller is always solving relative position: where the boom tip is, where the receptacle is, and what offset remains in lateral, vertical, and forward axes.",
+    title: "Route scoring",
+    body: "Pathlight does not just minimize distance. It scores each corridor on ambiguity, crowd pressure, landmark richness, hazard exposure, and low-vision readability.",
   },
   {
-    title: "Control",
-    body: "Desired boom-tip motion becomes `moveECEF(...)` commands, then inverse kinematics and rate limits turn that into yaw, pitch, and extension changes the plant can actually follow.",
+    title: "Guidance",
+    body: "Every route step turns into an assistive prompt: action, distance band, landmark cue, clock-direction hint, and safety note timed for the next decision point.",
   },
   {
-    title: "Safety",
-    body: "Closure spikes, disagreement between passive tracks, and keep-out violations trigger hold, abort, or breakaway before the controller keeps pushing into a bad intercept.",
+    title: "Rerouting",
+    body: "When a corridor closes or a queue swells, Pathlight reacts before the traveler reaches the stress point, shifting to a calmer route instead of forcing late recovery.",
   },
 ];
 
@@ -55,7 +55,7 @@ export function LandingPage() {
               Four steps.
             </h2>
             <p className="mt-4 max-w-xl font-sans text-base text-landing-muted">
-              From setup to replay — the path the sim walks.
+              Choose a traveler mode, compare routes, experience the journey, and replay the improvement.
             </p>
             <LandingPipelineCards />
           </section>
@@ -92,14 +92,13 @@ export function LandingPage() {
             className="landing-section mt-14 border-t border-landing-line pt-12 sm:mt-16 sm:pt-14"
           >
             <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-ember">
-              Math + physics
+              Guidance engine
             </p>
             <h2 className="mt-3 max-w-2xl font-sans text-3xl font-semibold leading-tight tracking-tight text-landing-fg sm:text-4xl">
-              The project in plain English.
+              How it works
             </h2>
             <p className="mt-4 max-w-2xl font-sans text-base leading-relaxed text-landing-muted">
-              This sim is about relative motion, not magic. The hard part is keeping a moving boom and a moving
-              receptacle aligned while perception gets noisy and the safe closure window stays narrow.
+              This system is about confidence-first mobility, not shortest-path routing. The hard part is choosing a route a blind or low-vision traveler can actually follow calmly when landmarks are weak and hazards shift mid-journey.
             </p>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {mathCards.map((card) => (
@@ -121,24 +120,23 @@ export function LandingPage() {
                   Try it
                 </p>
                 <h2 className="mt-2 font-sans text-xl font-semibold text-landing-fg sm:text-2xl">
-                  Open the sim.
+                  Open the twin.
                 </h2>
                 <p className="mt-2 max-w-md font-sans text-sm text-landing-muted sm:text-base">
-                  Runs in the browser — fullscreen works best for flying the
-                  boom.
+                  Runs in the browser. Fullscreen works best for comparing the live journey, route overlays, and assistive output.
                 </p>
               </div>
               <Link
                 href="/sim"
                 className="inline-flex shrink-0 items-center justify-center rounded-full bg-ember px-8 py-3 font-sans text-[13px] font-semibold text-white shadow-[0_0_24px_rgba(227,107,23,0.25)] transition hover:bg-[#ea7a2c]"
               >
-                Open sim
+                Open Pathlight
               </Link>
             </div>
             <div className="mt-8 flex items-center gap-3 border-t border-landing-line pt-8">
               <Image src="/boom-logo.svg" alt="" width={28} height={28} />
               <span className="font-sans text-[13px] font-semibold tracking-tight text-landing-fg">
-                Boom
+                Pathlight
               </span>
             </div>
           </section>

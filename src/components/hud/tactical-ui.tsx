@@ -17,6 +17,7 @@ export function TacticalPanel({
   bodyClassName = "",
   scrollBody = false,
   headerRight,
+  headerActions,
   panelDragHandle,
   ...props
 }: {
@@ -27,6 +28,7 @@ export function TacticalPanel({
   bodyClassName?: string;
   scrollBody?: boolean;
   headerRight?: ReactNode;
+  headerActions?: ReactNode;
   panelDragHandle?: ReactNode;
 } & ComponentPropsWithoutRef<"section">) {
   return (
@@ -46,9 +48,10 @@ export function TacticalPanel({
             </h2>
           ) : null}
         </div>
-        {headerRight || panelDragHandle ? (
+        {headerRight || headerActions || panelDragHandle ? (
           <div className="shrink-0 flex items-start gap-2">
             {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+            {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
             {panelDragHandle ? <div className="shrink-0">{panelDragHandle}</div> : null}
           </div>
         ) : null}
@@ -168,6 +171,24 @@ export const HudButton = forwardRef<
 });
 
 HudButton.displayName = "HudButton";
+
+export const HudIconButton = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement>
+>(function HudIconButton({ children, className = "", ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--hud-line)]/70 bg-black/20 font-sans text-[14px] font-medium leading-none text-[color:var(--hud-muted)] transition hover:border-[color:var(--hud-accent)]/45 hover:text-[color:var(--hud-accent-fg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--hud-accent)] disabled:pointer-events-none disabled:opacity-40 ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+});
+
+HudIconButton.displayName = "HudIconButton";
 
 export function SegmentedBar({ value }: { value: number }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);

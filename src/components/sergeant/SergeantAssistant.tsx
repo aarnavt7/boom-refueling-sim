@@ -8,12 +8,19 @@ import { useOnboardingPresentation } from "@/lib/onboarding/useOnboardingPresent
 import { buildSergeantContextSnapshot } from "@/lib/sergeant/context";
 import {
   createSergeantMessage,
+  type SergeantClientAction,
   type SergeantMessage,
   type SergeantQuickActionId,
   type SergeantResponsePayload,
   type SergeantSystemHint,
 } from "@/lib/sergeant/types";
+import { AIRCRAFT_CARD_OPTIONS, CAMERA_MODE_OPTIONS } from "@/lib/sim/autonomyCatalog";
+import { scenarioPresets } from "@/lib/sim/scenarios";
+import { runAutonomyEvaluation } from "@/lib/sim/autonomyEvaluation";
 import { getDisplayedState } from "@/lib/sim/replay";
+import {
+  saveLocalRunSnapshot,
+} from "@/lib/storage/simStorage";
 import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import {
   persistSergeantState,
@@ -65,8 +72,76 @@ function normalizeHints(hints: SergeantSystemHint[] | undefined) {
       (hint.action === undefined ||
         hint.action === "resume-onboarding" ||
         hint.action === "start-quick-tour" ||
-        hint.action === "start-mission-walkthrough"),
+        hint.action === "start-mission-walkthrough" ||
+        hint.action === "start-live-run" ||
+        hint.action === "pause-live-run" ||
+        hint.action === "stop-live-run" ||
+        hint.action === "slow-live-run" ||
+        hint.action === "speed-up-live-run" ||
+        hint.action === "set-manual-camera" ||
+        hint.action === "set-receiver-camera" ||
+        hint.action === "set-dock-camera" ||
+        hint.action === "open-replay" ||
+        hint.action === "return-live" ||
+        hint.action === "save-run" ||
+        hint.action === "run-uploaded-evaluation" ||
+        hint.action === "manual-breakaway" ||
+        hint.action === "debug-on" ||
+        hint.action === "debug-off"),
   );
+}
+
+function normalizeClientActions(actions: SergeantClientAction[] | undefined) {
+  if (!Array.isArray(actions)) {
+    return [] as SergeantClientAction[];
+  }
+
+  return actions.filter((action) => {
+    if (typeof action !== "object" || action === null || typeof action.type !== "string") {
+      return false;
+    }
+
+    if (
+      action.type === "start-live-run" ||
+      action.type === "pause-live-run" ||
+      action.type === "stop-live-run" ||
+      action.type === "request-manual-breakaway" ||
+      action.type === "save-run" ||
+      action.type === "run-uploaded-evaluation"
+    ) {
+      return true;
+    }
+
+    if (
+      action.type === "set-debug" &&
+      typeof action.enabled === "boolean"
+    ) {
+      return true;
+    }
+
+    if (
+      action.type === "set-replay-mode" &&
+      typeof action.enabled === "boolean"
+    ) {
+      return true;
+    }
+
+    return (
+      (action.type === "adjust-live-run-rate" &&
+        (action.direction === "slower" || action.direction === "faster")) ||
+      (action.type === "set-scenario" && typeof action.scenarioId === "string") ||
+      (action.type === "set-camera-mode" &&
+        CAMERA_MODE_OPTIONS.some((option) => option.id === action.cameraMode)) ||
+      (action.type === "set-aircraft-card" &&
+        AIRCRAFT_CARD_OPTIONS.some((option) => option.id === action.aircraftCardId)) ||
+      (action.type === "set-replay-source" &&
+        (action.source === "session" || action.source === "autonomy")) ||
+      (action.type === "set-evaluation-view" &&
+        (action.view === "baseline" ||
+          action.view === "uploaded" ||
+          action.view === "overlay"))
+    );
+  });
 }
 
 function getDefaultPromptSuggestions(hasCompletedOrientationTour: boolean) {
@@ -86,7 +161,7 @@ function getDefaultPromptSuggestions(hasCompletedOrientationTour: boolean) {
 }
 
 export function SergeantAssistant() {
-  const { isCompact, prefersReducedMotion } = useOnboardingPresentation();
+  const { prefersReducedMotion } = useOnboardingPresentation();
   const hasHydrated = useOnboardingStore((state) => state.hasHydrated);
   const onboardingStatus = useOnboardingStore((state) => state.status);
   const onboardingOpen = useOnboardingStore((state) => state.isOpen);
@@ -113,12 +188,16 @@ export function SergeantAssistant() {
   const scenario = useSimStore((state) => state.scenario);
   const live = useSimStore((state) => state.live);
   const replaySamples = useSimStore((state) => state.replaySamples);
+  const autonomyEvaluation = useSimStore((state) => state.autonomyEvaluation);
+  const lastAutonomyUpload = useSimStore((state) => state.lastAutonomyUpload);
   const persistStatus = useSimStore((state) => state.persistStatus);
   const persistMessage = useSimStore((state) => state.persistMessage);
 
   const selectedAircraftCardId = useUiStore((state) => state.selectedAircraftCardId);
   const cameraMode = useUiStore((state) => state.cameraMode);
+  const showDebug = useUiStore((state) => state.showDebug);
   const liveRunState = useUiStore((state) => state.liveRunState);
+  const liveRunRate = useUiStore((state) => state.liveRunRate);
   const replayMode = useUiStore((state) => state.replayMode);
   const replayDataSource = useUiStore((state) => state.replayDataSource);
   const evaluationView = useUiStore((state) => state.evaluationView);
@@ -182,9 +261,11 @@ export function SergeantAssistant() {
         scenarioUi: {
           aircraftCardId: selectedAircraftCardId,
           cameraMode,
+          showDebug,
         },
         run: {
           liveRunState,
+          liveRunRate,
           replayMode,
           replayPlaying,
           replayIndex,
@@ -194,6 +275,10 @@ export function SergeantAssistant() {
           simTime: displayedState.simTime,
           persistStatus,
           persistMessage,
+          runControlsLocked: isMissionActive,
+          replaySampleCount: replaySamples.length,
+          hasAutonomyUpload: lastAutonomyUpload !== null,
+          hasAutonomyEvaluation: autonomyEvaluation !== null,
         },
         metrics: {
           positionError: displayedState.metrics.positionError,
@@ -214,7 +299,11 @@ export function SergeantAssistant() {
       hasCompletedOrientationTour,
       hasCompletedReplayDebrief,
       hasCompletedWelcome,
+      isMissionActive,
+      autonomyEvaluation,
+      lastAutonomyUpload,
       liveRunState,
+      liveRunRate,
       onboardingDismissed,
       onboardingStatus,
       pausedOnboardingContext,
@@ -224,8 +313,10 @@ export function SergeantAssistant() {
       replayIndex,
       replayMode,
       replayPlaying,
+      replaySamples.length,
       scenario,
       selectedAircraftCardId,
+      showDebug,
       tourCurrentStepId,
     ],
   );
@@ -397,10 +488,213 @@ export function SergeantAssistant() {
     openSergeantFromUi(isTourActive || isMissionActive);
   }
 
-  function triggerQuickAction(action: SergeantQuickActionId) {
-    closeAssistant();
+  async function executeClientAction(action: SergeantClientAction) {
+    const onboardingState = useOnboardingStore.getState();
+    const uiState = useUiStore.getState();
+    const simState = useSimStore.getState();
+    const runControlsLocked =
+      (onboardingState.status === "guided-run" || onboardingState.status === "replay-debrief") &&
+      !onboardingState.isDismissed &&
+      onboardingState.guidedRunStage !== null;
 
+    if (runControlsLocked) {
+      appendSystemMessage(
+        "The guided walkthrough is managing the run right now, so I left the controls untouched.",
+      );
+      return;
+    }
+
+    const applyScenarioChange = (scenarioId: string) => {
+      uiState.setScenarioId(scenarioId);
+      uiState.setReplayMode(false);
+      uiState.setReplayPlaying(false);
+      uiState.setReplayIndex(0);
+      uiState.clearManualAbort();
+      uiState.stopLiveRun();
+      simState.setScenarioById(scenarioId);
+    };
+
+    if (action.type === "start-live-run") {
+      uiState.setReplayMode(false);
+      uiState.setReplayPlaying(false);
+      uiState.setReplayIndex(0);
+      uiState.clearManualAbort();
+
+      if (uiState.liveRunState === "paused" && !uiState.replayMode) {
+        uiState.startLiveRun();
+        return;
+      }
+
+      simState.resetScenario(simState.scenario.id);
+      uiState.startLiveRun();
+      return;
+    }
+
+    if (action.type === "pause-live-run") {
+      if (uiState.replayMode || uiState.liveRunState !== "running") {
+        return;
+      }
+
+      uiState.pauseLiveRun();
+      return;
+    }
+
+    if (action.type === "stop-live-run") {
+      uiState.setReplayMode(false);
+      uiState.setReplayPlaying(false);
+      uiState.setReplayIndex(0);
+      uiState.clearManualAbort();
+      uiState.stopLiveRun();
+      simState.resetScenario(simState.scenario.id);
+      return;
+    }
+
+    if (action.type === "set-scenario") {
+      const targetScenario = scenarioPresets.find((scenarioOption) => scenarioOption.id === action.scenarioId);
+      if (!targetScenario) {
+        appendSystemMessage("I could not find that scenario in the current preset list.");
+        return;
+      }
+
+      applyScenarioChange(targetScenario.id);
+      return;
+    }
+
+    if (action.type === "set-camera-mode") {
+      uiState.setCameraMode(action.cameraMode);
+      return;
+    }
+
+    if (action.type === "set-aircraft-card") {
+      uiState.setSelectedAircraftCardId(action.aircraftCardId);
+      return;
+    }
+
+    if (action.type === "set-debug") {
+      uiState.setShowDebug(action.enabled);
+      return;
+    }
+
+    if (action.type === "request-manual-breakaway") {
+      if (uiState.replayMode || uiState.liveRunState !== "running" || uiState.manualAbort) {
+        return;
+      }
+
+      uiState.requestManualAbort();
+      return;
+    }
+
+    if (action.type === "set-replay-mode") {
+      const hasAnyReplayData =
+        simState.replaySamples.length > 0 ||
+        (simState.autonomyEvaluation !== null &&
+          (simState.autonomyEvaluation.baselineReplaySamples.length > 0 ||
+            simState.autonomyEvaluation.uploadedReplaySamples.length > 0));
+
+      if (action.enabled && !hasAnyReplayData) {
+        appendSystemMessage("There is no replay data yet. Run a pass first, then I can open replay.");
+        return;
+      }
+
+      if (action.enabled && uiState.liveRunState === "running") {
+        uiState.pauseLiveRun();
+      }
+
+      uiState.setReplayMode(action.enabled);
+      uiState.setReplayPlaying(false);
+      if (!action.enabled) {
+        uiState.setReplayIndex(0);
+      }
+      return;
+    }
+
+    if (action.type === "set-replay-source") {
+      if (action.source === "autonomy" && simState.autonomyEvaluation === null) {
+        appendSystemMessage("There is no autonomy replay yet. Run the uploaded evaluation first.");
+        return;
+      }
+
+      if (action.source === "session" && simState.replaySamples.length === 0) {
+        appendSystemMessage("There is no session replay yet. Run a live pass first.");
+        return;
+      }
+
+      uiState.setReplayDataSource(action.source);
+      uiState.setReplayMode(true);
+      uiState.setReplayPlaying(false);
+      return;
+    }
+
+    if (action.type === "set-evaluation-view") {
+      if (simState.autonomyEvaluation === null) {
+        appendSystemMessage("There is no uploaded autonomy evaluation open yet.");
+        return;
+      }
+
+      uiState.setEvaluationView(action.view);
+      return;
+    }
+
+    if (action.type === "save-run") {
+      if (simState.replaySamples.length === 0) {
+        appendSystemMessage("There is no replay data to save yet. Run a pass first.");
+        return;
+      }
+
+      simState.setPersistStatus("saving", null);
+      try {
+        const result = await saveLocalRunSnapshot({
+          scenario: simState.scenario,
+          state: simState.live,
+          replaySamples: simState.replaySamples,
+        });
+        simState.setPersistStatus("saved", result.message);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown persistence error";
+        simState.setPersistStatus("error", message);
+        appendSystemMessage(message);
+      }
+      return;
+    }
+
+    if (action.type === "run-uploaded-evaluation") {
+      if (!simState.lastAutonomyUpload) {
+        appendSystemMessage("Upload controller.js or mission.json first, then I can run the eval.");
+        return;
+      }
+
+      simState.setPersistStatus("saving", "Running uploaded autonomy evaluation...");
+      uiState.setReplayPlaying(false);
+      uiState.setReplayIndex(0);
+      if (uiState.liveRunState === "running") {
+        uiState.pauseLiveRun();
+      }
+
+      try {
+        const result = await runAutonomyEvaluation({
+          scenario: simState.scenario,
+          manifest: simState.lastAutonomyUpload,
+        });
+        simState.setAutonomyEvaluation(result);
+        uiState.setReplayDataSource("autonomy");
+        uiState.setEvaluationView("overlay");
+        uiState.setReplayMode(true);
+        simState.setPersistStatus("saved", "Autonomy evaluation ready.");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to run uploaded evaluation.";
+        simState.setPersistStatus("error", message);
+        appendSystemMessage(message);
+      }
+      return;
+    }
+
+    uiState.stepLiveRunRate(action.direction === "slower" ? -1 : 1);
+  }
+
+  function triggerQuickAction(action: SergeantQuickActionId) {
     if (action === "resume-onboarding") {
+      closeAssistant();
       if (onboardingStatus === "tour") {
         resumeOrientationTour();
       } else {
@@ -411,6 +705,7 @@ export function SergeantAssistant() {
     }
 
     if (action === "start-quick-tour") {
+      closeAssistant();
       if (!hasCompletedWelcome && onboardingStatus !== "welcome") {
         startWelcome();
       }
@@ -419,6 +714,82 @@ export function SergeantAssistant() {
       return;
     }
 
+    if (action === "start-live-run") {
+      void executeClientAction({ type: "start-live-run" });
+      return;
+    }
+
+    if (action === "pause-live-run") {
+      void executeClientAction({ type: "pause-live-run" });
+      return;
+    }
+
+    if (action === "stop-live-run") {
+      void executeClientAction({ type: "stop-live-run" });
+      return;
+    }
+
+    if (action === "slow-live-run") {
+      void executeClientAction({ type: "adjust-live-run-rate", direction: "slower" });
+      return;
+    }
+
+    if (action === "speed-up-live-run") {
+      void executeClientAction({ type: "adjust-live-run-rate", direction: "faster" });
+      return;
+    }
+
+    if (action === "set-manual-camera") {
+      void executeClientAction({ type: "set-camera-mode", cameraMode: "manual" });
+      return;
+    }
+
+    if (action === "set-receiver-camera") {
+      void executeClientAction({ type: "set-camera-mode", cameraMode: "receiver-lock" });
+      return;
+    }
+
+    if (action === "set-dock-camera") {
+      void executeClientAction({ type: "set-camera-mode", cameraMode: "dock-lock" });
+      return;
+    }
+
+    if (action === "open-replay") {
+      void executeClientAction({ type: "set-replay-mode", enabled: true });
+      return;
+    }
+
+    if (action === "return-live") {
+      void executeClientAction({ type: "set-replay-mode", enabled: false });
+      return;
+    }
+
+    if (action === "save-run") {
+      void executeClientAction({ type: "save-run" });
+      return;
+    }
+
+    if (action === "run-uploaded-evaluation") {
+      void executeClientAction({ type: "run-uploaded-evaluation" });
+      return;
+    }
+
+    if (action === "manual-breakaway") {
+      void executeClientAction({ type: "request-manual-breakaway" });
+      return;
+    }
+
+    if (action === "debug-on") {
+      void executeClientAction({ type: "set-debug", enabled: true });
+      return;
+    }
+
+    if (action === "debug-off") {
+      void executeClientAction({ type: "set-debug", enabled: false });
+      return;
+    }
+
+    closeAssistant();
     startGuidedRun();
     setPausedOnboardingContext(null);
   }
@@ -458,6 +829,10 @@ export function SergeantAssistant() {
       });
 
       const payload = (await response.json()) as Partial<SergeantResponsePayload>;
+      for (const action of normalizeClientActions(payload.clientActions)) {
+        await executeClientAction(action);
+      }
+
       if (isSergeantMessage(payload.assistantMessage)) {
         appendMessage(payload.assistantMessage);
       } else {
@@ -523,7 +898,7 @@ export function SergeantAssistant() {
       >
         <div className="border-b border-[color:var(--hud-line)] px-3 py-3">
           <p className="font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-            Ask about the current state, replay, controls, or what to do next.
+            Ask about the current state, replay, controls, or tell me to start, pause, or slow a pass.
           </p>
           {actionOptions.length > 0 || promptOptions.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -614,7 +989,7 @@ export function SergeantAssistant() {
               ? "Thinking through the current sim state."
               : status === "error"
                 ? "Local reply channel unavailable. Try again."
-                : "Read-only helper grounded in the current sim and replay state."}
+                : "Grounded in the current sim, with direct control over live run start, pause, stop, and rate."}
           </p>
         </form>
       </TacticalPanel>

@@ -9,31 +9,31 @@ export const AIRCRAFT_CARD_OPTIONS: Array<{
 }> = [
   {
     id: "kc46_f15",
-    label: "KC-46 / F-15E",
-    subtitle: "Current mishap framing",
-    tanker: "KC-46A Pegasus",
-    receiver: "F-15E Strike Eagle",
+    label: "Blind mode",
+    subtitle: "Landmark-first prompting",
+    tanker: "Audio cue stack",
+    receiver: "Clock-direction guidance",
   },
   {
     id: "kc135_f16",
-    label: "KC-135 / F-16",
-    subtitle: "Legacy tanker pairing",
-    tanker: "KC-135 Stratotanker",
-    receiver: "F-16 Fighting Falcon",
+    label: "Low-vision mode",
+    subtitle: "Contrast + simplification",
+    tanker: "High-contrast route glow",
+    receiver: "Reduced visual clutter",
   },
   {
     id: "kc10_f22",
-    label: "KC-10 / F-22",
-    subtitle: "High-end fighter intercept",
-    tanker: "KC-10 Extender",
-    receiver: "F-22 Raptor",
+    label: "First-trip mode",
+    subtitle: "Confidence-first pacing",
+    tanker: "Longer lead prompts",
+    receiver: "Lower ambiguity route",
   },
   {
     id: "a330_rafale",
-    label: "A330 MRTT / Rafale",
-    subtitle: "Allied operator flavor",
-    tanker: "A330 MRTT",
-    receiver: "Dassault Rafale",
+    label: "Crowd-aware mode",
+    subtitle: "Stress reduction under pressure",
+    tanker: "Queue avoidance",
+    receiver: "Calmer corridor choice",
   },
 ];
 
@@ -44,18 +44,18 @@ export const CAMERA_MODE_OPTIONS: Array<{
 }> = [
   {
     id: "manual",
-    label: "Manual",
-    detail: "Free orbit. Drag to rotate, scroll to zoom, and inspect the full formation.",
+    label: "Free orbit",
+    detail: "Inspect the full terminal and route graph from any angle.",
   },
   {
     id: "receiver-lock",
-    label: "Receiver lock",
-    detail: "Track the receiver like a tactical chase camera.",
+    label: "Traveler follow",
+    detail: "Follow the traveler and keep the next turn centered.",
   },
   {
     id: "dock-lock",
-    label: "Dock lock",
-    detail: "Stay tight on the boom tip, receptacle, and mate envelope.",
+    label: "Route focus",
+    detail: "Frame the traveler, destination, and highlighted route together.",
   },
 ];
 
@@ -92,4 +92,4 @@ export const SAMPLE_MISSION_JSON = JSON.stringify(
 );
 
 export const AUTONOMY_UPLOAD_HELP =
-  "Upload controller.js exporting step(input), plus optional mission.json with timestamped mock disturbances.";
+  "Unused in the TSA competition branch.";

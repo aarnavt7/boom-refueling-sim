@@ -2,17 +2,7 @@
 
 import { create } from "zustand";
 
-import {
-  EMPTY_COMMAND,
-  EMPTY_ESTIMATE,
-  EMPTY_METRICS,
-  EMPTY_SAFETY,
-  EMPTY_TRACKER,
-  EMPTY_AUTOPILOT_COMMAND,
-  INITIAL_BOOM_STATE,
-} from "@/lib/sim/constants";
-import { getReceiverReceptacleWorld } from "@/lib/sim/aircraftAttachments";
-import { sampleReceiverPose } from "@/lib/sim/motion";
+import { buildPathlightLiveState } from "@/lib/sim/pathlightEngine";
 import { getScenarioById } from "@/lib/sim/scenarios";
 import type {
   AutonomyEvaluationBundle,
@@ -22,6 +12,7 @@ import type {
   SensorFrame,
   UploadedAutonomyManifest,
 } from "@/lib/sim/types";
+import { useUiStore } from "@/lib/store/uiStore";
 
 type PersistStatus = "idle" | "saving" | "saved" | "error";
 
@@ -29,6 +20,7 @@ type SimStore = {
   scenario: ScenarioPreset;
   live: LiveSimState;
   replaySamples: ReplaySample[];
+  plannedRunSamples: ReplaySample[];
   autonomyEvaluation: AutonomyEvaluationBundle | null;
   lastAutonomyUpload: UploadedAutonomyManifest | null;
   sensorFrame: SensorFrame | null;
@@ -39,6 +31,7 @@ type SimStore = {
   resetScenario: (scenarioId?: string) => void;
   setLive: (live: LiveSimState) => void;
   setReplaySamples: (samples: ReplaySample[]) => void;
+  setPlannedRunSamples: (samples: ReplaySample[]) => void;
   pushReplaySample: (sample: ReplaySample) => void;
   setAutonomyEvaluation: (bundle: AutonomyEvaluationBundle | null) => void;
   setLastAutonomyUpload: (manifest: UploadedAutonomyManifest | null) => void;
@@ -49,35 +42,26 @@ type SimStore = {
 
 export function createInitialLiveState(scenarioId = "steady-approach"): LiveSimState {
   const scenario = getScenarioById(scenarioId);
-  const receiverPose = sampleReceiverPose(0, scenario);
-  const targetPosition = getReceiverReceptacleWorld(receiverPose);
-
-  return {
-    simTime: 0,
-    frame: 0,
-    receiverPose,
-    targetPose: {
-      position: targetPosition,
-      rotation: receiverPose.rotation,
-    },
-    boom: INITIAL_BOOM_STATE,
-    autopilotCommand: EMPTY_AUTOPILOT_COMMAND,
-    command: EMPTY_COMMAND,
-    controllerState: "SEARCH",
-    sensorObservations: [EMPTY_ESTIMATE],
-    estimate: EMPTY_ESTIMATE,
-    tracker: EMPTY_TRACKER,
-    safety: EMPTY_SAFETY,
-    metrics: EMPTY_METRICS,
-    abortReason: null,
-  };
+  const profileId = useUiStore.getState().selectedAircraftCardId;
+  const seeded = buildPathlightLiveState({
+    scenario,
+    profileId,
+  });
+  return seeded.live;
 }
 
 export const useSimStore = create<SimStore>((set, get) => ({
   scenario: getScenarioById("steady-approach"),
   live: createInitialLiveState(),
   replaySamples: [],
-  autonomyEvaluation: null,
+  plannedRunSamples: buildPathlightLiveState({
+    scenario: getScenarioById("steady-approach"),
+    profileId: useUiStore.getState().selectedAircraftCardId,
+  }).sessionPlan,
+  autonomyEvaluation: buildPathlightLiveState({
+    scenario: getScenarioById("steady-approach"),
+    profileId: useUiStore.getState().selectedAircraftCardId,
+  }).comparison,
   lastAutonomyUpload: null,
   sensorFrame: null,
   lastRecordedAt: 0,
@@ -85,11 +69,17 @@ export const useSimStore = create<SimStore>((set, get) => ({
   persistMessage: null,
   setScenarioById: (scenarioId) => {
     const scenario = getScenarioById(scenarioId);
+    const profileId = useUiStore.getState().selectedAircraftCardId;
+    const seeded = buildPathlightLiveState({
+      scenario,
+      profileId,
+    });
     set({
       scenario,
-      live: createInitialLiveState(scenario.id),
+      live: seeded.live,
       replaySamples: [],
-      autonomyEvaluation: null,
+      plannedRunSamples: seeded.sessionPlan,
+      autonomyEvaluation: seeded.comparison,
       lastAutonomyUpload: get().lastAutonomyUpload,
       sensorFrame: null,
       lastRecordedAt: 0,
@@ -100,11 +90,17 @@ export const useSimStore = create<SimStore>((set, get) => ({
   resetScenario: (scenarioId) => {
     const activeId = scenarioId ?? get().scenario.id;
     const scenario = getScenarioById(activeId);
+    const profileId = useUiStore.getState().selectedAircraftCardId;
+    const seeded = buildPathlightLiveState({
+      scenario,
+      profileId,
+    });
     set({
       scenario,
-      live: createInitialLiveState(activeId),
+      live: seeded.live,
       replaySamples: [],
-      autonomyEvaluation: null,
+      plannedRunSamples: seeded.sessionPlan,
+      autonomyEvaluation: seeded.comparison,
       lastAutonomyUpload: get().lastAutonomyUpload,
       sensorFrame: null,
       lastRecordedAt: 0,
@@ -114,6 +110,7 @@ export const useSimStore = create<SimStore>((set, get) => ({
   },
   setLive: (live) => set({ live }),
   setReplaySamples: (replaySamples) => set({ replaySamples }),
+  setPlannedRunSamples: (plannedRunSamples) => set({ plannedRunSamples }),
   pushReplaySample: (sample) =>
     set((state) => ({
       replaySamples: [...state.replaySamples.slice(-399), sample],

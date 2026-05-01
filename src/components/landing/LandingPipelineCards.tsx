@@ -1,26 +1,26 @@
 const pipeline = [
   {
     step: "01",
-    title: "Mission setup",
-    body: "Pick the aircraft card, scenario, camera lock, and optional autonomy upload before launch.",
+    title: "Choose traveler mode",
+    body: "Pick blind or low-vision output, select a journey preset, and frame the terminal before launch.",
     icon: "scan",
   },
   {
     step: "02",
-    title: "Passive track",
-    body: "Visible + thermal acquisition and terminal sensors fused into one geometry-first receptacle track.",
+    title: "Score the route",
+    body: "Pathlight weighs ambiguity, landmark richness, hazard load, crowd pressure, and low-vision readability instead of pure distance.",
     icon: "eye",
   },
   {
     step: "03",
-    title: "Control + safety",
-    body: "Staged controller, `moveECEF(...)` autopilot commands, and hold / abort / breakaway logic.",
+    title: "Guide the traveler",
+    body: "Live prompts combine action, distance, landmark reference, clock-direction hint, and dynamic reroute notes.",
     icon: "shield",
   },
   {
     step: "04",
     title: "Debrief",
-    body: "Compare baseline, uploaded, and overlay replays with offset, closure, confidence, and safety analytics.",
+    body: "Compare baseline, Pathlight, and overlay replays with drift, correction, clarity, confidence, and hazard metrics.",
     icon: "timeline",
   },
 ] as const;

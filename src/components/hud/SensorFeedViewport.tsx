@@ -1,128 +1,157 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import { ViewportFrame } from "@/components/hud/tactical-ui";
 import {
-  applySensorViewportModality,
-  resolveSensorViewportFeed,
+  SENSOR_VIEWPORT_MODALITY_OPTIONS,
   SENSOR_VIEWPORT_SOURCE_OPTIONS,
 } from "@/lib/sim/sensorViewport";
 import { useDisplayedReplayBundle } from "@/lib/sim/useDisplayedReplayBundle";
-import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
 type SensorFeedViewportProps = {
-  /** Passed to `ViewportFrame` (corner brackets). */
   viewportFrameClassName?: string;
-  /** Outer aspect box wrapping the sensor canvas (sensor raster is square). */
   aspectClassName?: string;
-  /** When false, only canvas + tracking overlay (use inside another frame). */
   showViewportChrome?: boolean;
-  /** Outer wrapper (e.g. `h-full w-full` inside a framed shot). */
   rootClassName?: string;
 };
 
-/**
- * Live passive sensor viewport: same `sensorFrame` pipeline as `/sim` (driven by `SimCanvas`).
- * Renders the primary active sensor feed with a fused-track box + crosshairs.
- */
+function resolvePreviewCopy({
+  source,
+  modality,
+  prompt,
+}: {
+  source: string;
+  modality: string;
+  prompt: NonNullable<ReturnType<typeof useDisplayedReplayBundle>["primary"]["journey"]>["guidancePrompt"] | null;
+}) {
+  if (!prompt) {
+    return {
+      title: "Assistive output idle",
+      primary: "Start a journey to preview guidance prompts.",
+      secondary: "Pathlight will surface route cues, landmarks, and hazard warnings here.",
+      tone: "border-[color:var(--hud-line)] text-[color:var(--hud-muted)]",
+    };
+  }
+
+  if (source === "tail-acq-left") {
+    return {
+      title: "Audio prompt",
+      primary: prompt.primary,
+      secondary: `${prompt.landmark} ${prompt.safetyNote}`,
+      tone: "border-[color:var(--hud-accent)]/50 text-[color:var(--hud-accent-fg)]",
+    };
+  }
+
+  if (source === "tail-acq-right") {
+    return {
+      title: "Landmark cue",
+      primary: prompt.landmark,
+      secondary: `${prompt.primary} ${prompt.safetyNote}`,
+      tone: "border-[color:var(--hud-ok)]/45 text-[color:var(--hud-ok)]",
+    };
+  }
+
+  if (source === "boom-term-left") {
+    return {
+      title: "Hazard focus",
+      primary: prompt.safetyNote,
+      secondary: `${prompt.primary} ${prompt.landmark}`,
+      tone: "border-[color:var(--hud-warn)]/55 text-[color:var(--hud-warn)]",
+    };
+  }
+
+  return {
+    title: modality === "visible" ? "Low-vision route glow" : "Confidence-first output",
+    primary: prompt.primary,
+    secondary: `${prompt.clockHint} · ${prompt.distanceLabel}`,
+    tone: "border-[color:var(--hud-accent)]/50 text-[color:var(--hud-accent-fg)]",
+  };
+}
+
 export function SensorFeedViewport({
   viewportFrameClassName = "",
   aspectClassName = "aspect-square w-full",
   showViewportChrome = true,
   rootClassName = "",
 }: SensorFeedViewportProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const sensorFrame = useSimStore((state) => state.sensorFrame);
+  const displayed = useDisplayedReplayBundle().primary;
   const sensorViewportSource = useUiStore((state) => state.sensorViewportSource);
   const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
-  const replayDataSource = useUiStore((state) => state.replayDataSource);
-  const evaluationView = useUiStore((state) => state.evaluationView);
-  const displayed = useDisplayedReplayBundle().primary;
-  const viewportFeed = useMemo(
+  const prompt = displayed.journey?.guidancePrompt ?? null;
+  const assistiveMode = displayed.journey?.assistiveMode ?? "blind";
+
+  const sourceLabel =
+    SENSOR_VIEWPORT_SOURCE_OPTIONS.find((option) => option.id === sensorViewportSource)?.label ??
+    SENSOR_VIEWPORT_SOURCE_OPTIONS[0].label;
+  const modalityLabel =
+    SENSOR_VIEWPORT_MODALITY_OPTIONS.find((option) => option.id === sensorViewportModality)?.label ??
+    SENSOR_VIEWPORT_MODALITY_OPTIONS[0].label;
+
+  const preview = useMemo(
     () =>
-      resolveSensorViewportFeed({
-        state: displayed,
+      resolvePreviewCopy({
         source: sensorViewportSource,
         modality: sensorViewportModality,
+        prompt,
       }),
-    [displayed, sensorViewportModality, sensorViewportSource],
+    [prompt, sensorViewportModality, sensorViewportSource],
   );
-  const renderedPixels = useMemo(() => {
-    if (!sensorFrame) {
-      return null;
-    }
 
-    return applySensorViewportModality(sensorFrame.pixels, viewportFeed.effectiveModality);
-  }, [sensorFrame, viewportFeed.effectiveModality]);
-  const sourceLabel =
-    SENSOR_VIEWPORT_SOURCE_OPTIONS.find((option) => option.id === viewportFeed.effectiveSensorId)?.label ??
-    viewportFeed.observation.sensorName;
-  const feedAvailable =
-    viewportFeed.observation.visible &&
-    !viewportFeed.observation.dropout &&
-    viewportFeed.observation.imagePoint !== null;
-
-  useEffect(() => {
-    if (!sensorFrame || !renderedPixels || !canvasRef.current) {
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    canvas.width = sensorFrame.width;
-    canvas.height = sensorFrame.height;
-    const safePixels = new Uint8ClampedArray(sensorFrame.width * sensorFrame.height * 4);
-    safePixels.set(renderedPixels);
-    const image = new ImageData(safePixels, sensorFrame.width, sensorFrame.height);
-    context.putImageData(image, 0, 0);
-  }, [renderedPixels, sensorFrame]);
+  const lowVisionMode = assistiveMode === "low-vision" || sensorViewportModality === "visible";
 
   const inner = (
-    <div className={`relative ${aspectClassName}`}>
-      <canvas ref={canvasRef} className="h-full w-full object-cover opacity-95" />
-      <div className="pointer-events-none absolute left-2 top-2 rounded-full border border-[color:var(--hud-line)] bg-black/70 px-2 py-1 font-sans text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--hud-fg)]">
-        {viewportFeed.effectiveModality}
+    <div className={`relative overflow-hidden ${aspectClassName}`}>
+      <div
+        className={`absolute inset-0 ${
+          lowVisionMode
+            ? "bg-[radial-gradient(circle_at_50%_20%,rgba(255,208,122,0.32),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]"
+            : "bg-[radial-gradient(circle_at_50%_20%,rgba(125,208,255,0.22),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))]"
+        }`}
+      />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:linear-gradient(rgba(255,255,255,0.95)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.95)_1px,transparent_1px)] [background-size:18px_18px]" />
+      <div className="absolute left-3 right-3 top-3 flex items-center justify-between gap-3">
+        <span className={`rounded-full border px-2 py-1 font-sans text-[10px] font-medium ${preview.tone}`}>
+          {preview.title}
+        </span>
+        <span className="rounded-full border border-[color:var(--hud-line)] bg-black/45 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-fg)]">
+          {sourceLabel} · {modalityLabel}
+        </span>
       </div>
-      <div className="pointer-events-none absolute right-2 top-2 rounded-full border border-[color:var(--hud-line)] bg-black/70 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-fg)]">
-        {sourceLabel}
+
+      <div className="absolute inset-x-4 top-[4.2rem] rounded-[18px] border border-[color:var(--hud-line)] bg-black/35 p-3">
+        <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+          Primary cue
+        </p>
+        <p className="mt-2 font-sans text-sm font-medium leading-relaxed text-[color:var(--hud-fg)]">
+          {preview.primary}
+        </p>
+        <p className="mt-3 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+          {preview.secondary}
+        </p>
       </div>
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-[62%] w-[62%] border border-[color:var(--hud-accent)]/25" />
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[color:var(--hud-accent)]/15" />
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[color:var(--hud-accent)]/15" />
+
+      <div className="absolute inset-x-4 bottom-4 grid gap-2">
+        <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/35 px-3 py-2">
+          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+            Assistive output
+          </p>
+          <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-fg)]">
+            {prompt ? `${prompt.clockHint} · ${prompt.distanceLabel}` : "Clock-direction and distance cues will appear here."}
+          </p>
+        </div>
+        <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/35 px-3 py-2">
+          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+            Visual treatment
+          </p>
+          <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-fg)]">
+            {lowVisionMode
+              ? "Low-vision mode suppresses clutter, thickens the route, and strengthens landmark contrast."
+              : "Blind mode keeps prompts concise and landmark-first so the traveler can build trust quickly."}
+          </p>
+        </div>
       </div>
-      {feedAvailable && viewportFeed.observation.imagePoint ? (
-        <div
-          className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 border border-[color:var(--hud-accent)]/65"
-          style={{
-            left: `${((viewportFeed.observation.imagePoint.x + 1) * 0.5 * 100).toFixed(2)}%`,
-            top: `${((1 - (viewportFeed.observation.imagePoint.y + 1) * 0.5) * 100).toFixed(2)}%`,
-          }}
-        >
-          <span className="absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-[color:var(--hud-accent)]" />
-          <span className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 -translate-y-1/2 bg-[color:var(--hud-accent)]" />
-        </div>
-      ) : null}
-      {!feedAvailable ? (
-        <div className="pointer-events-none absolute bottom-2 right-2 rounded-full border border-[color:var(--hud-warn)]/60 bg-black/70 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-warn)]">
-          {viewportFeed.observation.dropout ? "Sensor dropout" : "Track unavailable"}
-        </div>
-      ) : null}
-      {replayDataSource === "autonomy" ? (
-        <div className="pointer-events-none absolute bottom-2 left-2 rounded-full border border-[color:var(--hud-line)] bg-black/60 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-fg)]">
-          {evaluationView === "overlay"
-            ? "Overlay replay"
-            : evaluationView === "uploaded"
-              ? "Uploaded replay"
-              : "Baseline replay"}
-        </div>
-      ) : null}
     </div>
   );
 

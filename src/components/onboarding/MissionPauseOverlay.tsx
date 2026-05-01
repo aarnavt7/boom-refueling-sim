@@ -31,7 +31,7 @@ export function MissionPauseOverlay({
       <SpotlightOverlay selector={selector} active={open} compact={compact} />
       <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 sm:bottom-5">
         <TacticalPanel
-          title="Mission beat"
+          title="Journey beat"
           subtitle={progressLabel}
           className="animate-onboarding-fade-up rounded-[22px] shadow-[0_22px_60px_rgba(0,0,0,0.48)]"
           headerRight={
@@ -42,7 +42,7 @@ export function MissionPauseOverlay({
                   : "border-[color:var(--hud-accent)]/45 text-[color:var(--hud-accent-fg)]"
               }`}
             >
-              {tone === "success" ? "Docked" : "Pause"}
+              {tone === "success" ? "Arrived" : "Pause"}
             </span>
           }
         >

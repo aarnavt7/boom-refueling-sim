@@ -50,20 +50,20 @@ export function LandingHeroCopyReveal() {
       <div className="flex flex-1 flex-col justify-center px-5 pb-12 pt-24 text-center sm:px-8 sm:pt-28">
         <EnterLine show={unveiled} reduced={reduced} delayMs={80} className="will-change-[opacity,transform]">
           <h1 className="font-sans text-[clamp(3.75rem,14vw,8rem)] font-bold leading-[0.95] tracking-tight text-ember [text-shadow:0_0_48px_rgba(227,107,23,0.5),0_0_120px_rgba(227,107,23,0.22),0_2px_0_rgba(0,0,0,0.45)]">
-            Boom.
+            Pathlight.
           </h1>
         </EnterLine>
 
         <EnterLine show={unveiled} reduced={reduced} delayMs={190} className="mt-6">
           <p className="font-sans text-[clamp(1.5rem,4.2vw,2.85rem)] font-semibold leading-tight tracking-tight text-landing-fg">
-            Dock with confidence.
+            Navigate with confidence.
           </p>
         </EnterLine>
 
         <EnterLine show={unveiled} reduced={reduced} delayMs={300} className="mx-auto mt-5 max-w-lg">
           <p className="font-sans text-sm leading-relaxed text-landing-muted sm:text-base">
-            A browser refueling boom simulator: passive visible / thermal sensing, ECEF boom commands, and replayable
-            mission profiles for day, night, water, land, and EMCON.
+            A browser-based accessibility navigation digital twin for blind and low-vision travelers, with landmark-guided routing,
+            hazard rerouting, low-vision scene simplification, and replayable before/after journeys.
           </p>
         </EnterLine>
 
@@ -77,7 +77,7 @@ export function LandingHeroCopyReveal() {
             href="/sim"
             className="inline-flex items-center gap-2 rounded-full bg-ember px-6 py-3 font-sans text-[13px] font-semibold text-white shadow-[0_0_28px_rgba(227,107,23,0.35)] transition hover:bg-[#ea7a2c]"
           >
-            Open sim
+            Open Pathlight
             <span aria-hidden>→</span>
           </Link>
           <a

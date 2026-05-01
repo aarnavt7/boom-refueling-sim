@@ -38,18 +38,18 @@ export function SimStorageBootstrap() {
 
     if (prefs) {
       const safeScenarioId = getScenarioById(prefs.selectedScenarioId).id;
+      const safeProfileId = prefs.selectedAircraftCardId;
 
       if (safeScenarioId !== useUiStore.getState().selectedScenarioId) {
         setScenarioId(safeScenarioId);
-        setScenarioById(safeScenarioId);
       }
 
       if (prefs.showDebug !== useUiStore.getState().showDebug) {
         setShowDebug(prefs.showDebug);
       }
 
-      if (prefs.selectedAircraftCardId !== useUiStore.getState().selectedAircraftCardId) {
-        setSelectedAircraftCardId(prefs.selectedAircraftCardId);
+      if (safeProfileId !== useUiStore.getState().selectedAircraftCardId) {
+        setSelectedAircraftCardId(safeProfileId);
       }
 
       if (prefs.cameraMode !== useUiStore.getState().cameraMode) {
@@ -76,6 +76,8 @@ export function SimStorageBootstrap() {
       if (prefs.lastAutonomyUpload) {
         setLastAutonomyUpload(prefs.lastAutonomyUpload);
       }
+
+      setScenarioById(safeScenarioId);
     }
 
     setHydrated(true);

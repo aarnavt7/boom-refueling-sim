@@ -1,5 +1,11 @@
 import type { GuidedRunStageId } from "@/lib/onboarding/guidedRunConfig";
 import type { OrientationTourStepId } from "@/lib/onboarding/tourConfig";
+import type {
+  AircraftCardId,
+  CameraMode,
+  EvaluationView,
+  ReplayDataSource,
+} from "@/lib/sim/types";
 
 export const SERGEANT_STORAGE_KEY = "boom.sergeant.session.v1";
 export const SERGEANT_SESSION_VERSION = 1;
@@ -17,6 +23,21 @@ export type SergeantLiveRunState = "stopped" | "running" | "paused";
 export type SergeantMessageRole = "user" | "assistant";
 export type SergeantMessageKind = "user" | "assistant" | "system";
 export type SergeantConversationStatus = "idle" | "sending" | "error";
+export type SergeantClientAction =
+  | { type: "start-live-run" }
+  | { type: "pause-live-run" }
+  | { type: "stop-live-run" }
+  | { type: "adjust-live-run-rate"; direction: "slower" | "faster" }
+  | { type: "set-scenario"; scenarioId: string }
+  | { type: "set-camera-mode"; cameraMode: CameraMode }
+  | { type: "set-aircraft-card"; aircraftCardId: AircraftCardId }
+  | { type: "set-debug"; enabled: boolean }
+  | { type: "request-manual-breakaway" }
+  | { type: "set-replay-mode"; enabled: boolean }
+  | { type: "set-replay-source"; source: ReplayDataSource }
+  | { type: "set-evaluation-view"; view: EvaluationView }
+  | { type: "save-run" }
+  | { type: "run-uploaded-evaluation" };
 
 export type SergeantMessage = {
   id: string;
@@ -52,9 +73,11 @@ export type SergeantContextSnapshot = {
     description: string;
     aircraftCardId: string;
     cameraMode: string;
+    showDebug: boolean;
   };
   run: {
     liveRunState: SergeantLiveRunState;
+    liveRunRate: number;
     replayMode: boolean;
     replayPlaying: boolean;
     replayIndex: number;
@@ -65,6 +88,10 @@ export type SergeantContextSnapshot = {
     simTime: number;
     persistStatus: "idle" | "saving" | "saved" | "error";
     persistMessage: string | null;
+    runControlsLocked: boolean;
+    replaySampleCount: number;
+    hasAutonomyUpload: boolean;
+    hasAutonomyEvaluation: boolean;
   };
   metrics: {
     positionError: number;
@@ -79,7 +106,22 @@ export type SergeantContextSnapshot = {
 export type SergeantQuickActionId =
   | "resume-onboarding"
   | "start-quick-tour"
-  | "start-mission-walkthrough";
+  | "start-mission-walkthrough"
+  | "start-live-run"
+  | "pause-live-run"
+  | "stop-live-run"
+  | "slow-live-run"
+  | "speed-up-live-run"
+  | "set-manual-camera"
+  | "set-receiver-camera"
+  | "set-dock-camera"
+  | "open-replay"
+  | "return-live"
+  | "save-run"
+  | "run-uploaded-evaluation"
+  | "manual-breakaway"
+  | "debug-on"
+  | "debug-off";
 
 export type SergeantSystemHint = {
   id: string;
@@ -107,6 +149,7 @@ export type SergeantResponsePayload = {
   assistantMessage: SergeantMessage;
   systemHints?: SergeantSystemHint[];
   suggestedPrompts?: string[];
+  clientActions?: SergeantClientAction[];
 };
 
 function createMessageId() {
@@ -144,6 +187,6 @@ export function createSergeantWelcomeMessage() {
     role: "assistant",
     kind: "system",
     content:
-      "Sergeant online. Ask about the current run, replay, controls, or what to try next.",
+      "Sergeant online. Ask about the current run, replay, controls, or tell me to start a pass.",
   });
 }

@@ -26,7 +26,7 @@ type ReadyState = {
 };
 
 const MISSION_FAILURE_MESSAGE =
-  "The guided demo could not complete cleanly, but the sim is reset and ready for another pass.";
+  "The guided walkthrough did not complete cleanly, but the journey is reset and ready for another try.";
 
 const TARGETS = {
   mainViewport: '[data-tour="main-viewport"]',
@@ -70,42 +70,42 @@ function getReplayMilestones(length: number, samples: ReturnType<typeof useSimSt
 function getMissionCardCopy(stage: string, isRetrying: boolean): ReadyState | null {
   if (stage === "transition") {
     return {
-      title: "Now watch one clean run from search to dock.",
-      body: "The walkthrough will start one clean pass for you and pause at a few meaningful moments so the workflow stays easy to follow.",
+      title: "Now watch one clean journey from entry to arrival.",
+      body: "The walkthrough will start one guided trip for you and pause at a few meaningful moments so the route story stays easy to follow.",
       tone: "default",
     };
   }
 
   if (stage === "search") {
     return {
-      title: isRetrying ? "Resetting for one cleaner attempt." : "The system is establishing geometry.",
+      title: isRetrying ? "Resetting for one cleaner attempt." : "Pathlight is locating the clearest starting route.",
       body: isRetrying
-        ? "The first pass did not settle cleanly, so the sim is resetting once and starting the guided run again."
-        : "Right now it is scanning, shaping the intercept, and preparing for track lock.",
+        ? "The first journey did not settle cleanly, so the sim is resetting once and starting the guided walkthrough again."
+        : "Right now it is identifying nearby landmarks, checking the corridor layout, and preparing the first guidance cues.",
       tone: "default",
     };
   }
 
   if (stage === "acquire-track") {
     return {
-      title: "A stable track is forming.",
-      body: "The sensor view and controller strip matter most here. The run is moving from searching to confidently following the target.",
+      title: "The route plan is stabilizing.",
+      body: "The assistive preview and phase strip matter most here. The journey is moving from locating the space to confidently guiding the traveler.",
       tone: "default",
     };
   }
 
   if (stage === "align") {
     return {
-      title: "Alignment is tightening.",
-      body: "This is the clean handoff into final approach. The guidance panel and main view are the fastest way to read what is happening.",
+      title: "Guidance is centering on the best corridor.",
+      body: "This is the clean handoff into active wayfinding. The trip guidance panel and main view are the fastest way to read what is happening.",
       tone: "default",
     };
   }
 
   if (stage === "insert") {
     return {
-      title: "Insertion is underway.",
-      body: "The controller is making smaller corrections now, so the run should feel calmer than it did at first lock.",
+      title: "Pathlight is correcting in stride.",
+      body: "The route engine is making smaller corrections now, so the journey should feel calmer than it did at the first decision point.",
       tone: "default",
     };
   }
@@ -134,7 +134,7 @@ function getMissionProgressLabel(stage: string) {
     return "5 of 5";
   }
 
-  return "Guided run";
+  return "Guided journey";
 }
 
 export function GuidedRunDirector() {
@@ -318,8 +318,8 @@ export function GuidedRunDirector() {
       if (guidedRunStage === "acquire-track") {
         setPauseOverlay({
           selector: TARGETS.sensorFeed,
-          title: "Track lock is in.",
-          body: "This is the moment the system has enough confidence to move from searching to following the target.",
+          title: "The route is locked in.",
+          body: "This is the moment the system has enough confidence to move from locating the environment to guiding the traveler.",
           progressLabel: "2 of 5",
         });
         setSimFrozen(true);
@@ -334,8 +334,8 @@ export function GuidedRunDirector() {
       if (guidedRunStage === "align") {
         setPauseOverlay({
           selector: isCompact ? TARGETS.guidancePanel : TARGETS.mainViewport,
-          title: "Alignment is clean.",
-          body: "Now the guidance panel and the main view tell the story faster than raw telemetry.",
+          title: "Guidance is clean.",
+          body: "Now the trip guidance panel and main view explain the route faster than raw metrics.",
           progressLabel: "3 of 5",
         });
         setSimFrozen(true);
@@ -355,8 +355,8 @@ export function GuidedRunDirector() {
       if (guidedRunStage === "dock") {
         setPauseOverlay({
           selector: TARGETS.guidancePanel,
-          title: "Docked",
-          body: "The controller has reached a clean docked state. Replay and save are what matter next.",
+          title: "Arrived",
+          body: "The route has reached a clean arrival state. Replay and save are what matter next.",
           progressLabel: "5 of 5",
           tone: "success",
         });
@@ -429,7 +429,7 @@ export function GuidedRunDirector() {
           if (!shouldAutoSave) {
             setReadyState({
               title: "You’re ready to explore.",
-              body: "Replay is set up and save-run stays available here whenever you want to keep another pass locally.",
+              body: "Replay is set up and save-run stays available here whenever you want to keep another journey locally.",
               tone: "default",
             });
             setGuidedRunStage("ready");
@@ -446,15 +446,15 @@ export function GuidedRunDirector() {
             });
 
             recordAutoSavedRun(result.runId);
-            setPersistStatus("saved", "Saved locally. You can reopen this run anytime.");
+            setPersistStatus("saved", "Saved locally. You can reopen this journey anytime.");
             setReadyState({
               title: "You’re ready to explore.",
-              body: "Saved locally. You can reopen this run anytime, then use Start in the scenario rail whenever you want another live pass.",
+              body: "Saved locally. You can reopen this journey anytime, then use Start in the setup rail whenever you want another live route.",
               tone: "success",
             });
           } catch (error) {
             const message =
-              error instanceof Error ? error.message : "Unable to save the guided run locally.";
+              error instanceof Error ? error.message : "Unable to save the guided journey locally.";
             setPersistStatus("error", message);
             setReadyState({
               title: "You’re ready to explore.",
@@ -599,7 +599,7 @@ export function GuidedRunDirector() {
     }
 
     setReadyState({
-      title: "The guided demo did not finish cleanly.",
+      title: "The guided walkthrough did not finish cleanly.",
       body: MISSION_FAILURE_MESSAGE,
       tone: "warn",
     });
@@ -635,8 +635,8 @@ export function GuidedRunDirector() {
         title: "You’re ready to explore.",
         body:
           autoSavedRunId !== null
-            ? "Saved locally. You can reopen this run anytime, then use Start in the scenario rail whenever you want another live pass."
-            : "The guided walkthrough is complete. Replay and save-run stay available from the right rail, and Start launches another fresh run whenever you want one.",
+            ? "Saved locally. You can reopen this journey anytime, then use Start in the setup rail whenever you want another live route."
+            : "The guided walkthrough is complete. Replay and save-run stay available from the right rail, and Start launches another fresh journey whenever you want one.",
         tone: autoSavedRunId !== null ? "success" : "default",
       };
     }
@@ -650,11 +650,11 @@ export function GuidedRunDirector() {
 
   const missionCardProgress = useMemo(() => {
     if (!guidedRunStage) {
-      return "Guided run";
+      return "Guided journey";
     }
 
     if (guidedRunStage === "ready") {
-      return readyState?.tone === "warn" ? "Mission reset" : "Mission complete";
+      return readyState?.tone === "warn" ? "Journey reset" : "Journey complete";
     }
 
     return getMissionProgressLabel(guidedRunStage);
@@ -668,8 +668,8 @@ export function GuidedRunDirector() {
     if (guidedRunStage === "replay-intro") {
       return {
         selector: TARGETS.replaySlider,
-        title: "Replay picks up around first lock.",
-        body: "This is the fastest way to revisit the run without rerunning the whole scene.",
+        title: "Replay picks up at the first confident route.",
+        body: "This is the fastest way to revisit the journey without rerunning the whole scene.",
         progressLabel: "Replay 1 of 3",
         tone: "default" as const,
       };
@@ -678,7 +678,7 @@ export function GuidedRunDirector() {
     if (guidedRunStage === "replay-demo") {
       return {
         selector: TARGETS.replaySlider,
-        title: "The strip is stepping through the key beats.",
+        title: "The strip is stepping through the key route beats.",
         body: "You can scrub this same timeline manually any time you want a slower read.",
         progressLabel: "Replay 2 of 3",
         tone: "default" as const,
@@ -690,12 +690,12 @@ export function GuidedRunDirector() {
         selector: TARGETS.saveRunButton,
         title:
           !hasCompletedReplayDebrief && autoSavedRunId === null
-            ? "Saving one clean first run."
+            ? "Saving one clean first journey."
             : "Save-run stays here for later.",
         body:
           !hasCompletedReplayDebrief && autoSavedRunId === null
-            ? "The walkthrough saves a single local run on the first pass so you have something to reopen right away."
-            : "Because this is a review pass, saving is optional. Use it whenever you want to keep another local snapshot.",
+            ? "The walkthrough saves a single local journey on the first pass so you have something to reopen right away."
+            : "Because this is a review step, saving is optional. Use it whenever you want to keep another local snapshot.",
         progressLabel: "Replay 3 of 3",
         tone:
           !hasCompletedReplayDebrief && autoSavedRunId === null ? ("default" as const) : ("warn" as const),
@@ -747,7 +747,7 @@ export function GuidedRunDirector() {
   }
 
   const isFailureReady =
-    readyState?.title === "The guided demo did not finish cleanly." &&
+    readyState?.title === "The guided walkthrough did not finish cleanly." &&
     guidedRunStage === "ready";
 
   return (
@@ -758,7 +758,7 @@ export function GuidedRunDirector() {
         compact={isCompact}
         title={pauseOverlay?.title ?? ""}
         body={pauseOverlay?.body ?? ""}
-        progressLabel={pauseOverlay?.progressLabel ?? "Mission beat"}
+        progressLabel={pauseOverlay?.progressLabel ?? "Journey beat"}
         tone={pauseOverlay?.tone}
       />
 
@@ -769,7 +769,7 @@ export function GuidedRunDirector() {
         progressLabel={missionCardProgress}
         layout={guidedRunStage === "transition" ? "center" : "bottom"}
         tone={missionCard?.tone}
-        primaryActionLabel={guidedRunStage === "ready" ? "Explore sim" : undefined}
+        primaryActionLabel={guidedRunStage === "ready" ? "Explore Pathlight" : undefined}
         onPrimaryAction={guidedRunStage === "ready" ? (isFailureReady ? handleFailureExit : handleCompleteSuccess) : undefined}
         secondaryActionLabel={guidedRunStage === "ready" ? undefined : "Skip"}
         onSecondaryAction={guidedRunStage === "ready" ? undefined : handlePauseFlow}

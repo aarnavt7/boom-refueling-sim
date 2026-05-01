@@ -1,7 +1,7 @@
-import "server-only";
-
+import { formatLiveRunRate } from "@/lib/sim/runRate";
 import {
   createSergeantMessage,
+  type SergeantClientAction,
   type SergeantContextSnapshot,
   type SergeantMessage,
   type SergeantRequestPayload,
@@ -36,7 +36,7 @@ const PANEL_EXPLANATIONS = [
   {
     test: /\b(scenario|preset|night|dark|emcon|water|reset)\b/,
     reply: () =>
-      "The scenario panel is where you pick the mission conditions and launch a fresh live run. If you want darker conditions today, the night presets are the closest manual match until direct Sergeant execution lands in Phase 2.",
+      "The scenario panel is where you pick the mission conditions, adjust the live run rate, and launch a fresh pass. I can also start the selected run for you now.",
   },
   {
     test: /\b(replay|save|timeline|scrub)\b/,
@@ -46,7 +46,14 @@ const PANEL_EXPLANATIONS = [
 ];
 
 const ACTION_REQUEST_RE =
-  /\b(run|start|launch|switch|change|set|reset|simulate|create|generate|use)\b/;
+  /\b(run|start|launch|resume|pause|stop|switch|change|set|reset|simulate|create|generate|use|speed|slow)\b/;
+const START_RUN_RE = /\b(start|launch|begin|kick off|resume)\b.*\b(run|pass|sim|simulation)\b/;
+const PAUSE_RUN_RE = /\b(pause|hold)\b(?:.*\b(run|pass|sim|simulation)\b)?/;
+const STOP_RUN_RE = /\b(stop|reset|restart)\b.*\b(run|pass|sim|simulation)\b/;
+const SPEED_UP_RE =
+  /\b(speed up|speed(?:\s+\w+){0,2}\s+up|faster|accelerate|go quicker|go faster|increase speed)\b/;
+const SLOW_DOWN_RE =
+  /\b(slow down|slow(?:\s+\w+){0,2}\s+down|slower|decelerate|reduce speed|go slower)\b/;
 
 function describeControllerState(state: string) {
   if (state === "SEARCH") {
@@ -86,26 +93,49 @@ function getLatestUserMessage(messages: SergeantMessage[]) {
   return null;
 }
 
+function createResponse(
+  content: string,
+  context: SergeantContextSnapshot,
+  options: {
+    clientActions?: SergeantClientAction[];
+    systemHints?: SergeantSystemHint[];
+    suggestedPrompts?: string[];
+  } = {},
+): SergeantResponsePayload {
+  return {
+    assistantMessage: createSergeantMessage({
+      role: "assistant",
+      kind: "assistant",
+      content,
+    }),
+    clientActions: options.clientActions,
+    systemHints: options.systemHints ?? getSystemHints(context),
+    suggestedPrompts:
+      options.suggestedPrompts ?? getSuggestedPrompts(context, content.toLowerCase()),
+  };
+}
+
+function createRunControlBlockedReply() {
+  return "The guided walkthrough is managing the run right now, so I am leaving the controls alone until that flow finishes or is dismissed.";
+}
+
 function createActionReply(context: SergeantContextSnapshot) {
-  const manualGuidance = [
-    `use the Scenario panel to pick a preset, which is currently set to ${context.scenario.name}`,
-    "use Start live run to launch a fresh pass",
-    "use Debug on if you want more instrumentation",
-    "use the Replay panel once a run exists",
+  const guidance = [
+    `the Scenario panel is still set to ${context.scenario.name}`,
+    "I can start, pause, stop, or change the live run speed on command",
+    "the Replay panel is still where you inspect a finished pass",
   ];
 
-  return `I can help plan that, but I cannot directly run or reconfigure the sim yet. In Phase 1 I stay read-only and grounded in what is already on screen. For now, ${manualGuidance.join(
-    ", ",
-  )}. Phase 2 is where I start actually driving the setup for you.`;
+  return `I can drive the current run controls now. Right now, ${guidance.join(", ")}.`;
 }
 
 function createSceneReply(context: SergeantContextSnapshot) {
   const modeLabel = context.run.replayMode ? "replay" : "live";
   const runLabel =
     context.run.liveRunState === "running"
-      ? "The live run is advancing."
+      ? `The live run is advancing at ${formatLiveRunRate(context.run.liveRunRate)}.`
       : context.run.liveRunState === "paused"
-        ? "The live run is paused."
+        ? `The live run is paused at ${formatLiveRunRate(context.run.liveRunRate)}.`
         : "The live run is stopped.";
 
   return `You are looking at the ${modeLabel} view for ${context.scenario.name}. ${runLabel} The controller is in ${context.run.controllerLabel}, so ${describeControllerState(
@@ -131,7 +161,7 @@ function createNextStepReply(context: SergeantContextSnapshot) {
   }
 
   if (context.run.liveRunState === "stopped") {
-    return `You are ready for a manual pass. Pick a scenario, then use Start live run. ${context.scenario.name} is already selected if you want the current setup.`;
+    return `You are ready for a live pass. ${context.scenario.name} is already selected, and I can start it for you if you want.`;
   }
 
   return "You are in free exploration now. Watch the guidance panel first, then open replay if you want a slower read of the same pass.";
@@ -158,6 +188,12 @@ function getSystemHints(context: SergeantContextSnapshot): SergeantSystemHint[] 
       label: "Start mission walkthrough",
       action: "start-mission-walkthrough",
     });
+  } else if (!context.run.runControlsLocked && context.run.liveRunState !== "running") {
+    hints.push({
+      id: "start-live-run",
+      label: context.run.liveRunState === "paused" ? "Resume live run" : "Start live run",
+      action: "start-live-run",
+    });
   }
 
   return hints;
@@ -166,8 +202,8 @@ function getSystemHints(context: SergeantContextSnapshot): SergeantSystemHint[] 
 function getSuggestedPrompts(context: SergeantContextSnapshot, userMessage: string) {
   if (ACTION_REQUEST_RE.test(userMessage)) {
     return [
-      "What preset is closest to a dark run right now?",
-      "What does the guidance panel matter for first?",
+      "Start the run",
+      "Slow the run down",
       "What should I watch in replay after a run?",
     ];
   }
@@ -182,9 +218,186 @@ function getSuggestedPrompts(context: SergeantContextSnapshot, userMessage: stri
 
   return [
     "What state is the controller in?",
-    "What should I pay attention to first?",
+    "Start the run",
     "How do replay and save-run work?",
   ];
+}
+
+function createStartRunResponse(context: SergeantContextSnapshot): SergeantResponsePayload {
+  if (context.run.runControlsLocked) {
+    return createResponse(createRunControlBlockedReply(), context);
+  }
+
+  if (context.run.liveRunState === "running" && !context.run.replayMode) {
+    return createResponse(
+      "The live run is already advancing. I can pause it, slow it down, or keep explaining what the controller is doing.",
+      context,
+      {
+        systemHints: [
+          {
+            id: "pause-live-run",
+            label: "Pause live run",
+            action: "pause-live-run",
+          },
+          {
+            id: "slow-live-run",
+            label: "Slow live run",
+            action: "slow-live-run",
+          },
+        ],
+        suggestedPrompts: [
+          "Slow the run down",
+          "Pause the run",
+          "What state is the controller in?",
+        ],
+      },
+    );
+  }
+
+  return createResponse(
+    context.run.replayMode
+      ? `Exiting replay and launching a fresh ${context.scenario.name} live run now.`
+      : context.run.liveRunState === "paused"
+        ? "Resuming the paused live run now."
+        : `Starting a fresh ${context.scenario.name} live run now.`,
+    context,
+    {
+      clientActions: [{ type: "start-live-run" }],
+      systemHints: [
+        {
+          id: "pause-live-run",
+          label: "Pause live run",
+          action: "pause-live-run",
+        },
+        {
+          id: "slow-live-run",
+          label: "Slow live run",
+          action: "slow-live-run",
+        },
+      ],
+      suggestedPrompts: [
+        "Slow the run down",
+        "Pause the run",
+        "What should I watch first?",
+      ],
+    },
+  );
+}
+
+function createPauseRunResponse(context: SergeantContextSnapshot): SergeantResponsePayload {
+  if (context.run.runControlsLocked) {
+    return createResponse(createRunControlBlockedReply(), context);
+  }
+
+  if (context.run.replayMode) {
+    return createResponse("Replay is open right now, so there is no live run to pause.", context);
+  }
+
+  if (context.run.liveRunState !== "running") {
+    return createResponse("The live run is not currently advancing, so there is nothing to pause.", context);
+  }
+
+  return createResponse("Pausing the live run now.", context, {
+    clientActions: [{ type: "pause-live-run" }],
+    systemHints: [
+      {
+        id: "start-live-run",
+        label: "Resume live run",
+        action: "start-live-run",
+      },
+      {
+        id: "speed-up-live-run",
+        label: "Speed up run",
+        action: "speed-up-live-run",
+      },
+    ],
+    suggestedPrompts: [
+      "Resume the run",
+      "Speed it up",
+      "What happened just before the pause?",
+    ],
+  });
+}
+
+function createStopRunResponse(context: SergeantContextSnapshot): SergeantResponsePayload {
+  if (context.run.runControlsLocked) {
+    return createResponse(createRunControlBlockedReply(), context);
+  }
+
+  if (context.run.replayMode || context.run.liveRunState === "stopped") {
+    return createResponse("The live run is already stopped.", context);
+  }
+
+  return createResponse("Stopping the live run and resetting the current setup now.", context, {
+    clientActions: [{ type: "stop-live-run" }],
+    systemHints: [
+      {
+        id: "start-live-run",
+        label: "Start live run",
+        action: "start-live-run",
+      },
+    ],
+    suggestedPrompts: [
+      "Start the run again",
+      "What preset is selected?",
+      "What conditions does this scenario cover?",
+    ],
+  });
+}
+
+function createRunRateResponse(
+  context: SergeantContextSnapshot,
+  direction: "slower" | "faster",
+): SergeantResponsePayload {
+  if (context.run.runControlsLocked) {
+    return createResponse(createRunControlBlockedReply(), context);
+  }
+
+  if (context.run.replayMode) {
+    return createResponse(
+      "Replay is open, so the live rate control will apply once you return to a live pass.",
+      context,
+    );
+  }
+
+  const rate = context.run.liveRunRate;
+  const atBoundary =
+    (direction === "slower" && rate <= 0.5) || (direction === "faster" && rate >= 2);
+  if (atBoundary) {
+    return createResponse(
+      direction === "slower"
+        ? `The live run is already at the slowest rate, ${formatLiveRunRate(rate)}.`
+        : `The live run is already at the fastest rate, ${formatLiveRunRate(rate)}.`,
+      context,
+    );
+  }
+
+  return createResponse(
+    `${direction === "slower" ? "Slowing" : "Speeding up"} the live run from ${formatLiveRunRate(
+      rate,
+    )} now.`,
+    context,
+    {
+      clientActions: [{ type: "adjust-live-run-rate", direction }],
+      systemHints: [
+        {
+          id: direction === "slower" ? "speed-up-live-run" : "slow-live-run",
+          label: direction === "slower" ? "Speed up run" : "Slow live run",
+          action: direction === "slower" ? "speed-up-live-run" : "slow-live-run",
+        },
+        {
+          id: context.run.liveRunState === "running" ? "pause-live-run" : "start-live-run",
+          label: context.run.liveRunState === "running" ? "Pause live run" : "Start live run",
+          action: context.run.liveRunState === "running" ? "pause-live-run" : "start-live-run",
+        },
+      ],
+      suggestedPrompts: [
+        direction === "slower" ? "Speed it up again" : "Slow it down",
+        context.run.liveRunState === "running" ? "Pause the run" : "Start the run",
+        "What should I watch first?",
+      ],
+    },
+  );
 }
 
 export function buildSergeantFallbackResponse({
@@ -198,7 +411,18 @@ export function buildSergeantFallbackResponse({
   let content = createSceneReply(context);
 
   if (!userText) {
-    content = "Sergeant online. Ask what the current state means, what a panel does, or what the best next step is and I will keep it grounded in the sim you are actually looking at.";
+    content =
+      "Sergeant online. Ask what the current state means, what a panel does, what the best next step is, or tell me to start a pass.";
+  } else if (START_RUN_RE.test(normalized)) {
+    return createStartRunResponse(context);
+  } else if (PAUSE_RUN_RE.test(normalized)) {
+    return createPauseRunResponse(context);
+  } else if (STOP_RUN_RE.test(normalized)) {
+    return createStopRunResponse(context);
+  } else if (SPEED_UP_RE.test(normalized)) {
+    return createRunRateResponse(context, "faster");
+  } else if (SLOW_DOWN_RE.test(normalized)) {
+    return createRunRateResponse(context, "slower");
   } else if (ACTION_REQUEST_RE.test(normalized)) {
     content = createActionReply(context);
   } else if (
@@ -216,13 +440,7 @@ export function buildSergeantFallbackResponse({
     }
   }
 
-  return {
-    assistantMessage: createSergeantMessage({
-      role: "assistant",
-      kind: "assistant",
-      content,
-    }),
-    systemHints: getSystemHints(context),
+  return createResponse(content, context, {
     suggestedPrompts: getSuggestedPrompts(context, normalized),
-  };
+  });
 }

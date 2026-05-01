@@ -1,32 +1,12 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { DebugHelpers } from "@/components/scene/DebugHelpers";
-import {
-  LandingFlybyController,
-  LANDING_HERO_CAMERA_FOV,
-  LANDING_HERO_CAMERA_POSITION,
-} from "@/components/scene/LandingFlybyController";
-import { MainCameraPostProcessing } from "@/components/scene/MainCameraPostProcessing";
-import { CaptureCameraRig } from "@/components/scene/CaptureCameraRig";
 import { LandingSceneReadyNotifier } from "@/components/scene/LandingSceneReadyNotifier";
-import {
-  OuterEnvironment,
-  type OuterEnvironmentVariant,
-} from "@/components/scene/OuterEnvironment";
-import { Receiver } from "@/components/scene/Receiver";
-import { RefuelLinkEffect } from "@/components/scene/RefuelLinkEffect";
-import { SceneLighting } from "@/components/scene/SceneLighting";
-import { SimContentLayer } from "@/components/scene/SimContentLayer";
-import { TankerAssembly } from "@/components/scene/TankerAssembly";
-import { GamepadCameraRig } from "@/components/scene/GamepadCameraRig";
-import { TrackingCameraRig } from "@/components/scene/TrackingCameraRig";
-import { TrackingOverlays } from "@/components/scene/TrackingOverlays";
-import { TutorialCameraRig } from "@/components/scene/TutorialCameraRig";
+import { MainCameraPostProcessing } from "@/components/scene/MainCameraPostProcessing";
 import {
   CAPTURE_CANVAS_CLEAR,
   CAPTURE_TONE_MAPPING_EXPOSURE,
@@ -35,355 +15,478 @@ import {
   SIM_CANVAS_CLEAR,
   SIM_TONE_MAPPING_EXPOSURE,
 } from "@/components/scene/sunConfig";
-import {
-  MAIN_CAMERA_POSITION,
-  MAIN_CAMERA_TARGET,
-} from "@/lib/sim/aircraftVisualConfig";
-import { getReceiverReceptacleWorld, getTankerPose } from "@/lib/sim/aircraftAttachments";
-import {
-  MAX_FRAME_DT,
-  SENSOR_RESOLUTION,
-} from "@/lib/sim/constants";
-import { applyAutopilotCommand, toAutopilotCommandECEF } from "@/lib/sim/autopilot";
-import { updateController } from "@/lib/sim/controller";
-import { getBoomTipPose, solveBoomIK } from "@/lib/sim/kinematics";
-import { computeMetrics } from "@/lib/sim/metrics";
-import { sampleReceiverPose } from "@/lib/sim/motion";
-import { runPassivePerception } from "@/lib/sim/perception";
-import {
-  clampReplayIndex,
-  createReplaySample,
-  shouldRecordReplay,
-} from "@/lib/sim/replay";
-import { createSensorRenderTarget, readSensorFrame } from "@/lib/sim/renderTarget";
-import { evaluateSafety } from "@/lib/sim/safety";
-import { SIM_CONTENT_LAYER } from "@/lib/sim/sceneLayers";
-import { getSensorViewportRenderKey, resolveSensorViewportFeed } from "@/lib/sim/sensorViewport";
-import { updateTracker } from "@/lib/sim/tracker";
+import { REPLAY_SAMPLE_HZ } from "@/lib/sim/constants";
+import { clampReplayIndex } from "@/lib/sim/replay";
 import { useDisplayedReplayBundle } from "@/lib/sim/useDisplayedReplayBundle";
-import { isCaptureSimDriverActive, registerCaptureSimDriver } from "@/lib/sim/simDriver";
+import type { Landmark, ReplaySample, Vec3 } from "@/lib/sim/types";
 import { useOnboardingStore } from "@/lib/store/onboardingStore";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
 export type SimCanvasVariant = "sim" | "landing" | "capture";
 
-type WorldProps = {
-  sensorCameraRef: React.RefObject<THREE.PerspectiveCamera | null>;
-  sensorTarget: THREE.WebGLRenderTarget;
-  environmentVariant?: OuterEnvironmentVariant;
-  simVariant?: SimCanvasVariant;
-};
+function vecToArray(position: Vec3): [number, number, number] {
+  return [position.x, position.y, position.z];
+}
 
-function MainCameraLayerSync() {
-  const camera = useThree((s) => s.camera);
+function findSampleIndex(samples: ReplaySample[], simTime: number) {
+  if (samples.length === 0) {
+    return 0;
+  }
 
-  useLayoutEffect(() => {
-    camera.layers.enable(SIM_CONTENT_LAYER);
-  }, [camera]);
+  for (let index = 0; index < samples.length; index += 1) {
+    if ((samples[index]?.recordedAt ?? 0) >= simTime) {
+      return index;
+    }
+  }
+
+  return samples.length - 1;
+}
+
+function TerminalShell({ simplified }: { simplified: boolean }) {
+  const propOpacity = simplified ? 0.18 : 0.55;
+  const propColor = simplified ? "#30475e" : "#5c7594";
+
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[80, 80]} />
+        <meshStandardMaterial color={simplified ? "#0d141b" : "#111921"} roughness={0.92} metalness={0.04} />
+      </mesh>
+
+      <mesh position={[0, 2.5, 40]}>
+        <boxGeometry args={[28, 5, 0.5]} />
+        <meshStandardMaterial color="#182634" roughness={0.75} />
+      </mesh>
+      <mesh position={[14, 2.5, 20]} rotation={[0, Math.PI / 2, 0]}>
+        <boxGeometry args={[40, 5, 0.5]} />
+        <meshStandardMaterial color="#1c2a37" roughness={0.75} />
+      </mesh>
+      <mesh position={[-14, 2.5, 20]} rotation={[0, Math.PI / 2, 0]}>
+        <boxGeometry args={[40, 5, 0.5]} />
+        <meshStandardMaterial color="#1b2733" roughness={0.75} />
+      </mesh>
+
+      <mesh position={[0, 0.02, 11]}>
+        <boxGeometry args={[4.5, 0.05, 10]} />
+        <meshStandardMaterial color="#52331c" emissive="#8d5318" emissiveIntensity={0.4} />
+      </mesh>
+
+      {[[-5, 0.55, 6], [7.5, 0.55, 25], [-8, 0.55, 30.5], [10, 0.55, 34.5]].map((position, index) => (
+        <mesh key={index} position={position as [number, number, number]}>
+          <boxGeometry args={[2.4, 1.3, 0.15]} />
+          <meshStandardMaterial color={simplified ? "#203347" : "#274965"} emissive="#f2b15b" emissiveIntensity={0.55} />
+        </mesh>
+      ))}
+
+      {!simplified ? (
+        <>
+          {[[-3.2, 0.32, 8.2], [-1, 0.32, 8.2], [1.2, 0.32, 8.2], [3.4, 0.32, 8.2]].map((position, index) => (
+            <group key={index} position={position as [number, number, number]}>
+              <mesh castShadow>
+                <cylinderGeometry args={[0.08, 0.08, 0.65, 12]} />
+                <meshStandardMaterial color={propColor} transparent opacity={propOpacity} />
+              </mesh>
+              <mesh position={[0, 0.25, 2]}>
+                <cylinderGeometry args={[0.08, 0.08, 0.65, 12]} />
+                <meshStandardMaterial color={propColor} transparent opacity={propOpacity} />
+              </mesh>
+            </group>
+          ))}
+          {[[-9, 0.24, 24], [-8, 0.24, 24], [-7, 0.24, 24], [8, 0.24, 28], [9, 0.24, 28]].map((position, index) => (
+            <mesh key={`bench-${index}`} position={position as [number, number, number]} castShadow>
+              <boxGeometry args={[0.8, 0.24, 1.6]} />
+              <meshStandardMaterial color={propColor} transparent opacity={propOpacity} />
+            </mesh>
+          ))}
+        </>
+      ) : null}
+    </group>
+  );
+}
+
+function LandmarkHalos({
+  landmarks,
+  assistiveMode,
+}: {
+  landmarks: Landmark[];
+  assistiveMode: "blind" | "low-vision";
+}) {
+  return (
+    <group>
+      {landmarks.map((landmark) => (
+        <group key={landmark.id} position={vecToArray(landmark.position)}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.42, 0.78, 48]} />
+            <meshBasicMaterial
+              color={assistiveMode === "low-vision" ? "#ffbf66" : "#8bd8ff"}
+              transparent
+              opacity={assistiveMode === "low-vision" ? 0.88 : 0.54}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh position={[0, 0.35, 0]}>
+            <sphereGeometry args={[0.1, 16, 16]} />
+            <meshStandardMaterial color="#f9f3d2" emissive="#ffe3a0" emissiveIntensity={0.65} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function HazardMarkers({
+  activeHazards,
+  scenarioHazards,
+  edges,
+  nodes,
+}: {
+  activeHazards: string[];
+  scenarioHazards: NonNullable<ReturnType<typeof useSimStore.getState>["scenario"]["journey"]>["hazards"];
+  edges: NonNullable<ReturnType<typeof useSimStore.getState>["scenario"]["journey"]>["edges"];
+  nodes: NonNullable<ReturnType<typeof useSimStore.getState>["scenario"]["journey"]>["nodes"];
+}) {
+  return (
+    <group>
+      {scenarioHazards
+        .filter((hazard) => activeHazards.includes(hazard.id))
+        .map((hazard) => {
+          const edge = edges.find((entry) => entry.id === hazard.edgeId);
+          if (!edge) {
+            return null;
+          }
+
+          const from = nodes.find((node) => node.id === edge.from);
+          const to = nodes.find((node) => node.id === edge.to);
+          if (!from || !to) {
+            return null;
+          }
+
+          const position = {
+            x: (from.position.x + to.position.x) * 0.5,
+            y: 0.12,
+            z: (from.position.z + to.position.z) * 0.5,
+          };
+
+          return (
+            <group key={hazard.id} position={vecToArray(position)}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[1.35, 1.35]} />
+                <meshBasicMaterial color="#c54e30" transparent opacity={0.8} side={THREE.DoubleSide} />
+              </mesh>
+              <mesh position={[0, 0.18, 0]}>
+                <boxGeometry args={[0.5, 0.32, 0.08]} />
+                <meshStandardMaterial color="#ffe0c2" emissive="#ff8f4d" emissiveIntensity={0.65} />
+              </mesh>
+            </group>
+          );
+        })}
+    </group>
+  );
+}
+
+function Traveler({
+  position,
+  assistiveMode,
+}: {
+  position: Vec3;
+  assistiveMode: "blind" | "low-vision";
+}) {
+  return (
+    <group position={vecToArray(position)}>
+      <mesh castShadow position={[0, 0.8, 0]}>
+        <capsuleGeometry args={[0.26, 0.72, 6, 12]} />
+        <meshStandardMaterial
+          color={assistiveMode === "low-vision" ? "#ffcf6e" : "#7dd0ff"}
+          emissive={assistiveMode === "low-vision" ? "#ff9e3d" : "#4ca7d9"}
+          emissiveIntensity={0.45}
+          roughness={0.32}
+        />
+      </mesh>
+      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.42, 0.78, 48]} />
+        <meshBasicMaterial
+          color={assistiveMode === "low-vision" ? "#ffd784" : "#93d9ff"}
+          transparent
+          opacity={0.8}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function DestinationBeacon({ position }: { position: Vec3 }) {
+  return (
+    <group position={vecToArray(position)}>
+      <mesh position={[0, 1.3, 0]}>
+        <cylinderGeometry args={[0.14, 0.14, 2.4, 16]} />
+        <meshStandardMaterial color="#fdf2ce" emissive="#ffcf7a" emissiveIntensity={0.7} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+        <ringGeometry args={[0.8, 1.2, 64]} />
+        <meshBasicMaterial color="#ffbf66" transparent opacity={0.9} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
+function CameraDirector({
+  enabledOrbitControls,
+}: {
+  enabledOrbitControls: boolean;
+}) {
+  const camera = useThree((state) => state.camera);
+  const displayed = useDisplayedReplayBundle().primary;
+  const cameraMode = useUiStore((state) => state.cameraMode);
+
+  useFrame((_, delta) => {
+    if (enabledOrbitControls || !displayed.journey) {
+      return;
+    }
+
+    const traveler = displayed.receiverPose.position;
+    const destination = displayed.targetPose.position;
+    const routeMid = {
+      x: (traveler.x + destination.x) * 0.5,
+      y: 0,
+      z: (traveler.z + destination.z) * 0.5,
+    };
+
+    const targetPosition =
+      cameraMode === "receiver-lock"
+        ? new THREE.Vector3(traveler.x - 4.8, 4.6, traveler.z - 6.2)
+        : new THREE.Vector3(routeMid.x + 7.2, 9.5, routeMid.z + 6.6);
+    const targetLook =
+      cameraMode === "receiver-lock"
+        ? new THREE.Vector3(traveler.x, 0.8, traveler.z + 2.4)
+        : new THREE.Vector3(routeMid.x, 0.6, routeMid.z + 4.4);
+
+    camera.position.lerp(targetPosition, 1 - Math.exp(-delta * 2.6));
+    camera.lookAt(targetLook);
+  });
 
   return null;
 }
 
 function SimulationWorld({
-  sensorCameraRef,
-  sensorTarget,
-  environmentVariant = "sim",
-  simVariant = "sim",
-}: WorldProps) {
-  const clear =
-    environmentVariant === "landing"
-      ? LANDING_CANVAS_CLEAR
-      : environmentVariant === "capture"
-        ? CAPTURE_CANVAS_CLEAR
-        : SIM_CANVAS_CLEAR;
+  simVariant,
+}: {
+  simVariant: SimCanvasVariant;
+}) {
   const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
-  const captureAccumulator = useRef(0);
-  const replayAccumulator = useRef(0);
-  const lastSensorRenderKeyRef = useRef<string | null>(null);
+  const displayedBundle = useDisplayedReplayBundle();
+  const displayed = displayedBundle.primary;
+  const comparison = displayedBundle.comparison;
   const allowOrbitControls = useOnboardingStore((state) => state.allowOrbitControls);
-  const cameraMode = useUiStore((state) => state.cameraMode);
-  const setCameraMode = useUiStore((state) => state.setCameraMode);
   const replayMode = useUiStore((state) => state.replayMode);
+  const replayIndex = useUiStore((state) => state.replayIndex);
+  const replayPlaying = useUiStore((state) => state.replayPlaying);
   const replayDataSource = useUiStore((state) => state.replayDataSource);
   const evaluationView = useUiStore((state) => state.evaluationView);
-  const replayIndex = useUiStore((state) => state.replayIndex);
-  const sensorViewportSource = useUiStore((state) => state.sensorViewportSource);
-  const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
+  const liveRunState = useUiStore((state) => state.liveRunState);
+  const liveRunRate = useUiStore((state) => state.liveRunRate);
+  const simFrozen = useUiStore((state) => state.simFrozen);
+  const setReplayIndex = useUiStore((state) => state.setReplayIndex);
+  const setReplayPlaying = useUiStore((state) => state.setReplayPlaying);
+  const stopLiveRun = useUiStore((state) => state.stopLiveRun);
+  const live = useSimStore((state) => state.live);
   const replaySamples = useSimStore((state) => state.replaySamples);
+  const plannedRunSamples = useSimStore((state) => state.plannedRunSamples);
   const autonomyEvaluation = useSimStore((state) => state.autonomyEvaluation);
-  const displayed = useDisplayedReplayBundle().primary;
-  const viewportFeed = resolveSensorViewportFeed({
-    state: displayed,
-    source: sensorViewportSource,
-    modality: sensorViewportModality,
-  });
-  const sensorViewportRenderKey = getSensorViewportRenderKey({
-    state: displayed,
-    source: sensorViewportSource,
-    modality: sensorViewportModality,
-    replayMode,
-    replayIndex,
-    replayDataSource,
-    evaluationView,
-  });
-  const activeReplaySampleCount =
-    replayDataSource === "autonomy" && autonomyEvaluation
-      ? Math.max(
-          autonomyEvaluation.baselineReplaySamples.length,
-          autonomyEvaluation.uploadedReplaySamples.length,
-        )
-      : replaySamples.length;
-  const handleOrbitStart = useCallback(() => {
-    if (simVariant !== "sim" || !allowOrbitControls) {
+  const setLive = useSimStore((state) => state.setLive);
+  const pushReplaySample = useSimStore((state) => state.pushReplaySample);
+  const setLastRecordedAt = useSimStore((state) => state.setLastRecordedAt);
+  const scenario = useSimStore((state) => state.scenario);
+  const sensorViewportModality = useUiStore((state) => state.sensorViewportModality);
+  const cameraMode = useUiStore((state) => state.cameraMode);
+  const sampleCursorRef = useRef(0);
+  const previewTimeRef = useRef(0);
+  const replayAccumulator = useRef(0);
+  const scenarioJourney = scenario.journey;
+
+  useLayoutEffect(() => {
+    if (simVariant !== "landing") {
       return;
     }
 
-    if (useUiStore.getState().cameraMode !== "manual") {
-      setCameraMode("manual");
-    }
-  }, [allowOrbitControls, setCameraMode, simVariant]);
+    camera.position.set(14.5, 10.6, -7.5);
+    camera.lookAt(0, 0.8, 18);
+  }, [camera, simVariant]);
+
+  useEffect(() => {
+    sampleCursorRef.current = 0;
+    previewTimeRef.current = 0;
+  }, [plannedRunSamples, scenario.id]);
 
   useFrame((_, delta) => {
-    if (simVariant === "landing" && isCaptureSimDriverActive()) {
+    if (simFrozen) {
       return;
     }
 
-    const uiState = useUiStore.getState();
-    const simState = useSimStore.getState();
-    const sensorViewportChanged = lastSensorRenderKeyRef.current !== sensorViewportRenderKey;
-
-    const refreshSensorFrame = (forceRead = false) => {
-      const sensorCamera = sensorCameraRef.current;
-      if (!sensorCamera) {
+    if (replayMode) {
+      if (!replayPlaying) {
         return;
       }
 
-      sensorCamera.updateWorldMatrix(true, false);
-      const previousTarget = gl.getRenderTarget();
-      gl.setRenderTarget(sensorTarget);
-      gl.clear();
-      gl.render(scene, sensorCamera);
-      gl.setRenderTarget(previousTarget);
+      const activeReplayLength =
+        replayDataSource === "autonomy" && autonomyEvaluation
+          ? Math.max(
+              autonomyEvaluation.baselineReplaySamples.length,
+              autonomyEvaluation.uploadedReplaySamples.length,
+            )
+          : replaySamples.length;
 
-      captureAccumulator.current += delta;
-      const needsFrame =
-        forceRead || simState.sensorFrame === null || captureAccumulator.current >= 0.12;
-      if (!needsFrame) {
-        return;
-      }
-
-      captureAccumulator.current = 0;
-      simState.setSensorFrame(readSensorFrame(gl, sensorTarget, SENSOR_RESOLUTION, SENSOR_RESOLUTION));
-      lastSensorRenderKeyRef.current = sensorViewportRenderKey;
-    };
-
-    if (uiState.simFrozen) {
-      /** Physics are paused but keep refreshing the sensor RTT read so the PIP stays valid (not stuck black). */
-      refreshSensorFrame(sensorViewportChanged || uiState.simFrozen);
-      return;
-    }
-
-    if (uiState.replayMode) {
-      refreshSensorFrame(sensorViewportChanged || !uiState.replayPlaying);
-
-      if (!uiState.replayPlaying || activeReplaySampleCount === 0) {
+      if (activeReplayLength === 0) {
         return;
       }
 
       replayAccumulator.current += delta;
-      if (replayAccumulator.current >= 1 / 20) {
+      if (replayAccumulator.current >= 1 / REPLAY_SAMPLE_HZ) {
         replayAccumulator.current = 0;
-        const nextIndex = clampReplayIndex(uiState.replayIndex + 1, activeReplaySampleCount);
-        useUiStore.getState().setReplayIndex(nextIndex);
-        if (nextIndex === activeReplaySampleCount - 1) {
-          useUiStore.getState().setReplayPlaying(false);
+        const nextIndex = clampReplayIndex(replayIndex + 1, activeReplayLength);
+        setReplayIndex(nextIndex);
+        if (nextIndex >= activeReplayLength - 1) {
+          setReplayPlaying(false);
         }
       }
       return;
     }
 
-    if (simVariant === "sim" && uiState.liveRunState !== "running") {
-      if (simState.sensorFrame === null || sensorViewportChanged) {
-        refreshSensorFrame(true);
+    if (simVariant === "sim") {
+      if (liveRunState !== "running" || plannedRunSamples.length === 0) {
+        return;
       }
+
+      const currentTime = live.simTime;
+      const nextTime = Math.min(
+        plannedRunSamples[plannedRunSamples.length - 1]?.recordedAt ?? currentTime,
+        currentTime + delta * liveRunRate,
+      );
+      const nextIndex = findSampleIndex(plannedRunSamples, nextTime);
+      const nextSample = plannedRunSamples[nextIndex];
+      if (!nextSample) {
+        return;
+      }
+
+      setLive(structuredClone(nextSample));
+
+      while (sampleCursorRef.current <= nextIndex) {
+        const sample = plannedRunSamples[sampleCursorRef.current];
+        if (!sample) {
+          break;
+        }
+        pushReplaySample(structuredClone(sample));
+        setLastRecordedAt(sample.recordedAt);
+        sampleCursorRef.current += 1;
+      }
+
+      if (nextIndex >= plannedRunSamples.length - 1) {
+        stopLiveRun();
+      }
+
       return;
     }
 
-    const dt = Math.min(delta, MAX_FRAME_DT);
-    const previous = simState.live;
-    const scenario = simState.scenario;
-    const simTime = previous.simTime + dt;
+    const previewSamples =
+      evaluationView === "baseline" && autonomyEvaluation
+        ? autonomyEvaluation.baselineReplaySamples
+        : autonomyEvaluation?.uploadedReplaySamples ?? plannedRunSamples;
 
-    const receiverPose = sampleReceiverPose(simTime, scenario);
-    const targetPosition = getReceiverReceptacleWorld(receiverPose);
-    const targetPose = {
-      position: targetPosition,
-      rotation: receiverPose.rotation,
-    };
-
-    const perception = runPassivePerception({
-      boom: previous.boom,
-      targetPose,
-      scenario,
-      simTime,
-    });
-    const estimate = perception.estimate;
-    refreshSensorFrame(sensorViewportChanged);
-
-    const tracker = updateTracker(previous.tracker, perception.observations, dt);
-    const boomTipBefore = getBoomTipPose(previous.boom).position;
-    const receiverVelocity = {
-      x: (receiverPose.position.x - previous.receiverPose.position.x) / Math.max(dt, 1e-3),
-      y: (receiverPose.position.y - previous.receiverPose.position.y) / Math.max(dt, 1e-3),
-      z: (receiverPose.position.z - previous.receiverPose.position.z) / Math.max(dt, 1e-3),
-    };
-    const metricsBefore = computeMetrics({
-      boomTip: boomTipBefore,
-      target: targetPosition,
-      tracker,
-      estimate,
-      observations: perception.observations,
-      autopilotCommand: previous.autopilotCommand,
-      previousMetrics: previous.metrics,
-      dt,
-    });
-
-    let controller = updateController({
-      state: previous.controllerState,
-      scenario,
-      boom: previous.boom,
-      boomTip: boomTipBefore,
-      trackedTarget: tracker,
-      estimate,
-      safety: previous.safety,
-      simTime,
-    });
-
-    const safety = evaluateSafety({
-      state: controller.state,
-      scenario,
-      metrics: metricsBefore,
-      previousMetrics: previous.metrics,
-      boomTip: boomTipBefore,
-      receiverPose,
-      receiverVelocity,
-      tracker,
-      observations: perception.observations,
-      manualAbort: uiState.manualAbort,
-    });
-
-    if (safety.abort || safety.breakaway || safety.hold) {
-      controller = updateController({
-        state: previous.controllerState,
-        scenario,
-        boom: previous.boom,
-        boomTip: boomTipBefore,
-        trackedTarget: tracker,
-        estimate,
-        safety,
-        simTime,
-      });
+    if (previewSamples.length === 0) {
+      return;
     }
 
-    const autopilotCommand = toAutopilotCommandECEF(controller.desiredTipMotion, getTankerPose());
-    const plant = applyAutopilotCommand(previous.boom, autopilotCommand, getTankerPose(), dt);
-    const nextBoom =
-      controller.state === "MATED"
-        ? solveBoomIK(targetPosition)
-        : plant.nextBoom;
-    const boomTipAfter = getBoomTipPose(nextBoom).position;
-    const metrics = computeMetrics({
-      boomTip: boomTipAfter,
-      target: targetPosition,
-      tracker,
-      estimate,
-      observations: perception.observations,
-      autopilotCommand,
-      previousMetrics: previous.metrics,
-      dt,
-    });
+    previewTimeRef.current += delta * 0.8;
+    const previewIndex = Math.floor(previewTimeRef.current * REPLAY_SAMPLE_HZ) % previewSamples.length;
+    const previewSample = previewSamples[previewIndex];
 
-    if (uiState.manualAbort && (controller.state === "BREAKAWAY" || controller.state === "ABORT")) {
-      useUiStore.getState().clearManualAbort();
-    }
-
-    const live = {
-      simTime,
-      frame: previous.frame + 1,
-      receiverPose,
-      targetPose,
-      boom: nextBoom,
-      autopilotCommand,
-      command: plant.command,
-      controllerState: controller.state,
-      sensorObservations: perception.observations,
-      estimate,
-      tracker,
-      safety,
-      metrics,
-      abortReason:
-        controller.state === "ABORT" || controller.state === "BREAKAWAY"
-          ? safety.reasons[0] ?? previous.abortReason
-          : null,
-    };
-
-    simState.setLive(live);
-
-    if (shouldRecordReplay(simTime, simState.lastRecordedAt)) {
-      simState.pushReplaySample(createReplaySample(live));
-      simState.setLastRecordedAt(simTime);
+    if (previewSample) {
+      setLive(structuredClone(previewSample));
     }
   });
 
+  useEffect(() => {
+    scene.background = new THREE.Color(simVariant === "landing" ? LANDING_CANVAS_CLEAR : simVariant === "capture" ? CAPTURE_CANVAS_CLEAR : SIM_CANVAS_CLEAR);
+    gl.setClearColor(scene.background, 1);
+  }, [gl, scene, simVariant]);
+
+  const simplified =
+    displayed.journey?.assistiveMode === "low-vision" || sensorViewportModality === "visible";
+  const primaryRoute = displayed.journey?.routePlan.points ?? [];
+  const comparisonRoute = comparison?.journey?.routePlan.points ?? [];
+  const activeHazards = displayed.journey?.activeHazards ?? [];
+
   return (
     <>
-      <MainCameraLayerSync />
-      <color attach="background" args={[clear]} />
-      <OuterEnvironment variant={environmentVariant} />
-      <SceneLighting />
-      <SimContentLayer>
-        <TankerAssembly
-          sensorCameraRef={sensorCameraRef}
-          sensorViewportSensorId={viewportFeed.effectiveSensorId}
-          boom={displayed.boom}
+      <ambientLight intensity={simplified ? 0.66 : 0.56} color="#e6dcc7" />
+      <directionalLight
+        position={[10, 16, -6]}
+        intensity={1.6}
+        color="#f8d7a1"
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <directionalLight position={[-12, 8, 12]} intensity={0.66} color="#6f90b6" />
+
+      <TerminalShell simplified={simplified} />
+
+      {primaryRoute.length >= 2 ? (
+        <Line
+          points={primaryRoute.map(vecToArray)}
+          color="#ffb55b"
+          lineWidth={simplified ? 7 : 5}
+          transparent
+          opacity={0.95}
         />
-        <Receiver />
-        {simVariant === "sim" ? (
-          <>
-            <RefuelLinkEffect />
-            <TrackingOverlays />
-          </>
-        ) : null}
-      </SimContentLayer>
-      <DebugHelpers />
-      {environmentVariant === "landing" ? (
-        <LandingFlybyController />
-      ) : simVariant === "capture" ? (
-        <CaptureCameraRig />
-      ) : (
+      ) : null}
+
+      {comparisonRoute.length >= 2 && replayDataSource === "autonomy" ? (
+        <Line
+          points={comparisonRoute.map(vecToArray)}
+          color={evaluationView === "overlay" ? "#7dd0ff" : evaluationView === "baseline" ? "#7dd0ff" : "#5c6f84"}
+          lineWidth={4}
+          transparent
+          opacity={evaluationView === "overlay" ? 0.68 : 0.92}
+        />
+      ) : null}
+
+      {scenarioJourney ? (
         <>
-          <OrbitControls
-            enabled={allowOrbitControls}
-            makeDefault
-            enableDamping
-            dampingFactor={0.08}
-            screenSpacePanning
-            target={[MAIN_CAMERA_TARGET.x, MAIN_CAMERA_TARGET.y, MAIN_CAMERA_TARGET.z]}
-            minDistance={9}
-            maxDistance={52}
-            maxPolarAngle={Math.PI * 0.85}
-            rotateSpeed={0.72}
-            panSpeed={0.82}
-            zoomSpeed={0.86}
-            onStart={handleOrbitStart}
+          <LandmarkHalos
+            landmarks={scenarioJourney.landmarks}
+            assistiveMode={displayed.journey?.assistiveMode ?? "blind"}
           />
-          <TrackingCameraRig />
-          <GamepadCameraRig />
-          <TutorialCameraRig />
+          <HazardMarkers
+            activeHazards={activeHazards}
+            scenarioHazards={scenarioJourney.hazards}
+            edges={scenarioJourney.edges}
+            nodes={scenarioJourney.nodes}
+          />
         </>
-      )}
+      ) : null}
+
+      <DestinationBeacon position={displayed.targetPose.position} />
+      <Traveler position={displayed.receiverPose.position} assistiveMode={displayed.journey?.assistiveMode ?? "blind"} />
+
+      <OrbitControls
+        enabled={allowOrbitControls && cameraMode === "manual"}
+        makeDefault
+        enableDamping
+        dampingFactor={0.08}
+        screenSpacePanning
+        target={[0, 0.8, 18]}
+        minDistance={8}
+        maxDistance={48}
+        maxPolarAngle={Math.PI * 0.48}
+        rotateSpeed={0.75}
+        panSpeed={0.85}
+        zoomSpeed={0.9}
+      />
+      <CameraDirector enabledOrbitControls={allowOrbitControls && cameraMode === "manual"} />
     </>
   );
 }
@@ -395,15 +498,10 @@ export function SimCanvas({
   landingForceRender,
 }: {
   variant?: SimCanvasVariant;
-  /** Landing only: called once assets + first paints are ready (boot overlay dismisses). */
   onLandingReady?: () => void;
-  /** Fullscreen `/sim` only: called once HDR/env assets report loaded (for boot overlay). */
   onSimReady?: () => void;
-  /** Landing only: keep the render loop running (e.g. while boot overlay hides the hero). */
   landingForceRender?: boolean;
 }) {
-  const sensorCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const sensorTarget = useMemo(() => createSensorRenderTarget(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [heroVisible, setHeroVisible] = useState(true);
 
@@ -420,32 +518,24 @@ export function SimCanvas({
         ? CAPTURE_TONE_MAPPING_EXPOSURE
         : SIM_TONE_MAPPING_EXPOSURE;
 
-  const outerEnv: OuterEnvironmentVariant =
-    variant === "landing" ? "landing" : variant === "capture" ? "capture" : "sim";
-
   useEffect(() => {
-    return () => {
-      sensorTarget.dispose();
-    };
-  }, [sensorTarget]);
+    if (variant !== "landing") {
+      return;
+    }
 
-  useLayoutEffect(() => {
-    if (variant !== "capture") return;
-    return registerCaptureSimDriver();
-  }, [variant]);
+    const element = containerRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      return;
+    }
 
-  useEffect(() => {
-    if (variant !== "landing") return;
-    const el = containerRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver(
-      ([e]) => {
-        setHeroVisible(!!e?.isIntersecting);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setHeroVisible(!!entry?.isIntersecting);
       },
       { root: null, rootMargin: "120px 0px", threshold: 0.02 },
     );
-    io.observe(el);
-    return () => io.disconnect();
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [variant]);
 
   return (
@@ -467,26 +557,12 @@ export function SimCanvas({
     >
       <Canvas
         className="block h-full w-full touch-none"
-        frameloop={
-          variant === "landing"
-            ? landingForceRender || heroVisible
-              ? "always"
-              : "never"
-            : "always"
-        }
-        shadows={{ type: THREE.PCFSoftShadowMap }}
+        frameloop={variant === "landing" ? (landingForceRender || heroVisible ? "always" : "never") : "always"}
+        shadows
         camera={{
-          position:
-            variant === "landing"
-              ? LANDING_HERO_CAMERA_POSITION
-              : [
-                  MAIN_CAMERA_POSITION.x,
-                  MAIN_CAMERA_POSITION.y,
-                  MAIN_CAMERA_POSITION.z,
-                ],
-          fov: variant === "landing" ? LANDING_HERO_CAMERA_FOV : 42,
+          position: variant === "landing" ? [14.5, 10.6, -7.5] : [16, 11, -4],
+          fov: variant === "landing" ? 34 : 42,
         }}
-        style={{ width: "100%", height: "100%" }}
         resize={{ scroll: false, debounce: { scroll: 0, resize: 0 } }}
         gl={{
           antialias: true,
@@ -494,8 +570,7 @@ export function SimCanvas({
           powerPreference: "high-performance",
         }}
         dpr={variant === "landing" ? [1, 1.5] : variant === "capture" ? [1, 2] : [1, 2]}
-        onCreated={({ gl, scene, camera }) => {
-          camera.layers.enable(SIM_CONTENT_LAYER);
+        onCreated={({ gl, scene }) => {
           scene.background = new THREE.Color(clearColor);
           gl.setClearColor(clearColor, 1);
           gl.toneMapping = THREE.AgXToneMapping;
@@ -503,12 +578,7 @@ export function SimCanvas({
           gl.outputColorSpace = THREE.SRGBColorSpace;
         }}
       >
-        <SimulationWorld
-          sensorCameraRef={sensorCameraRef}
-          sensorTarget={sensorTarget}
-          environmentVariant={outerEnv}
-          simVariant={variant}
-        />
+        <SimulationWorld simVariant={variant} />
         <MainCameraPostProcessing variant={variant} />
         {variant === "landing" && onLandingReady ? (
           <LandingSceneReadyNotifier onReady={onLandingReady} />

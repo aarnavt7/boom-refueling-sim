@@ -39,8 +39,8 @@ export type UserPrefs = {
 };
 
 export type RunSummaryMetrics = {
-  positionError: number;
-  dockScore: number;
+  deviationMeters: number;
+  accessScore: number;
   confidence: number;
   abortReason: string | null;
 };
@@ -227,10 +227,13 @@ function parseRunSummaryMetrics(value: unknown): RunSummaryMetrics | null {
     return null;
   }
 
-  const { positionError, dockScore, confidence, abortReason } = value;
+  const deviationMeters =
+    isFiniteNumber(value.deviationMeters) ? value.deviationMeters : value.positionError;
+  const accessScore = isFiniteNumber(value.accessScore) ? value.accessScore : value.dockScore;
+  const { confidence, abortReason } = value;
   if (
-    !isFiniteNumber(positionError) ||
-    !isFiniteNumber(dockScore) ||
+    !isFiniteNumber(deviationMeters) ||
+    !isFiniteNumber(accessScore) ||
     !isFiniteNumber(confidence) ||
     !(typeof abortReason === "string" || abortReason === null)
   ) {
@@ -238,8 +241,8 @@ function parseRunSummaryMetrics(value: unknown): RunSummaryMetrics | null {
   }
 
   return {
-    positionError,
-    dockScore,
+    deviationMeters,
+    accessScore,
     confidence,
     abortReason,
   };
@@ -358,8 +361,8 @@ export async function saveLocalRunSnapshot({
     completedAt: Date.now(),
     hasReplay,
     summary: {
-      positionError: Number(state.metrics.positionError.toFixed(3)),
-      dockScore: Number(state.metrics.dockScore.toFixed(3)),
+      deviationMeters: Number(state.metrics.positionError.toFixed(3)),
+      accessScore: Number((state.metrics.accessibilityScore ?? state.metrics.dockScore).toFixed(3)),
       confidence: Number(state.metrics.confidence.toFixed(3)),
       abortReason: state.abortReason,
     },

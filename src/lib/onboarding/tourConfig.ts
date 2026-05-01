@@ -36,36 +36,36 @@ const DESKTOP_TOUR_DEFINITIONS: readonly OrientationTourStepDefinition[] = [
   {
     id: "sim-header",
     selector: '[data-tour="sim-header"]',
-    title: "Live sim header",
+    title: "Live journey shell",
     description:
-      "This is the simulation shell. The run controls on the right rail let you start, pause, or stop a pass whenever you want.",
+      "This is the Pathlight shell. The controls on the right let you start, pause, or reset a journey whenever you want.",
     desktopPlacement: "bottom-start",
     mobilePlacement: "bottom",
   },
   {
     id: "guidance-panel",
     selector: '[data-tour="guidance-panel"]',
-    title: "Guidance first",
+    title: "Trip guidance first",
     description:
-      "Start here when you want the fastest read once a run is active. This panel tells you the controller state and whether the pass looks healthy.",
+      "Start here when you want the fastest read during a live journey. This panel tells you the current guidance phase and whether the route is staying calm and clear.",
     desktopPlacement: "right-start",
     mobilePlacement: "center",
   },
   {
     id: "sensor-feed",
     selector: '[data-tour="sensor-feed"]',
-    title: "Tracking view",
+    title: "Assistive preview",
     description:
-      "This synthetic EO/IR view shows what the tracking system is following. It gives context without making you read raw numbers first.",
+      "This panel previews what the traveler would receive: landmark cues, safety notes, and low-vision simplification without making you parse raw metrics first.",
     desktopPlacement: "right",
     mobilePlacement: "bottom",
   },
   {
     id: "controller-pipeline",
     selector: '[data-tour="controller-pipeline"]',
-    title: "Run phase",
+    title: "Journey phases",
     description:
-      "This strip shows the controller progression from SEARCH to DOCKED. Think of it as the run's current phase, not a manual checklist.",
+      "This strip shows the route progression from Locate to Arrive. Think of it as the current journey phase, not a manual checklist.",
     desktopPlacement: "right-start",
     mobilePlacement: "top",
   },
@@ -81,9 +81,9 @@ const DESKTOP_TOUR_DEFINITIONS: readonly OrientationTourStepDefinition[] = [
   {
     id: "scenario-panel",
     selector: '[data-tour="scenario-panel"]',
-    title: "Preset control",
+    title: "Journey setup",
     description:
-      "Use presets to change the motion conditions. The selected preset becomes the starting point for the next live run.",
+      "Use presets to change the environment, traveler profile, and route story. The selected setup becomes the starting point for the next live journey.",
     desktopPlacement: "left-start",
     mobilePlacement: "top",
   },
@@ -92,7 +92,7 @@ const DESKTOP_TOUR_DEFINITIONS: readonly OrientationTourStepDefinition[] = [
     selector: '[data-tour="run-controls"]',
     title: "Start, pause, stop",
     description:
-      "Start launches a fresh pass, Pause holds the current one, and Stop returns the sim to the preset start so it only moves when you want it to.",
+      "Start launches a fresh journey, Pause holds the current one, and Reset returns the traveler to the preset start so it only moves when you want it to.",
     desktopPlacement: "left-start",
     mobilePlacement: "top",
   },
@@ -101,7 +101,7 @@ const DESKTOP_TOUR_DEFINITIONS: readonly OrientationTourStepDefinition[] = [
     selector: '[data-tour="replay-panel"]',
     title: "Replay and save",
     description:
-      "Replay and save-run live here. Once a run exists, this is where you revisit it without starting another live pass.",
+      "Replay, compare, and save live here. Once a journey exists, this is where you revisit it without starting another live journey.",
     desktopPlacement: "left-start",
     mobilePlacement: "center",
   },

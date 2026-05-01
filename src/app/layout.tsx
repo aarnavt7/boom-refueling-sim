@@ -1,14 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans } from "next/font/google";
 
 import "./globals.css";
-
-const ibmSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-ibm-sans",
-  display: "swap",
-});
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -16,12 +8,12 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  applicationName: "Boom",
+  applicationName: "Pathlight",
   title: {
-    default: "Boom",
-    template: "%s · Boom",
+    default: "Pathlight",
+    template: "%s · Pathlight",
   },
-  description: "Boom — browser refueling boom simulator (Next.js, React Three Fiber).",
+  description: "Pathlight — browser accessibility navigation digital twin for blind and low-vision travelers.",
   icons: {
     icon: [
       { url: "/boom-logo.svg", type: "image/svg+xml" },
@@ -48,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={ibmSans.variable}>
+    <html lang="en">
       <body className="font-sans antialiased">{children}</body>
     </html>
   );

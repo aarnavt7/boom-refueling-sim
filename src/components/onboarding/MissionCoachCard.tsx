@@ -51,8 +51,8 @@ export function MissionCoachCard({
   return (
     <div className={`pointer-events-auto fixed z-40 ${positionClass}`}>
       <TacticalPanel
-        title="Guided run"
-        subtitle={progressLabel ?? "Mission walkthrough"}
+        title="Guided journey"
+        subtitle={progressLabel ?? "Journey walkthrough"}
         className="animate-onboarding-fade-up rounded-[24px] shadow-[0_24px_72px_rgba(0,0,0,0.5)]"
         headerRight={
           <span
@@ -60,7 +60,7 @@ export function MissionCoachCard({
               tone,
             )}`}
           >
-            {tone === "success" ? "Docked" : tone === "warn" ? "Notice" : "Live"}
+            {tone === "success" ? "Arrived" : tone === "warn" ? "Notice" : "Guided"}
           </span>
         }
       >

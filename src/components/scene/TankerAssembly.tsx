@@ -19,6 +19,8 @@ type TankerAssemblyProps = {
 function BoomMountFairing() {
   const fairing = TANKER_ATTACHMENT_CONFIG.boomFairing;
   const braceHalfWidth = fairing.shroudScale.x * 0.18;
+  const connectorCenterY = fairing.collarPosition.y + 1.18;
+  const connectorCenterZ = fairing.collarPosition.z - 0.18;
 
   return (
     <group>
@@ -49,6 +51,46 @@ function BoomMountFairing() {
           clearcoat={0.3}
           clearcoatRoughness={0.14}
           envMapIntensity={0.96}
+        />
+      </mesh>
+
+      <mesh
+        castShadow
+        receiveShadow
+        position={[fairing.collarPosition.x, connectorCenterY, connectorCenterZ]}
+        rotation={[0.24, 0, 0]}
+        scale={[1.12, 1, 1.18]}
+      >
+        <capsuleGeometry args={[0.17, 2.1, 10, 20]} />
+        <meshPhysicalMaterial
+          color="#6d7884"
+          metalness={0.38}
+          roughness={0.34}
+          clearcoat={0.14}
+          clearcoatRoughness={0.16}
+          envMapIntensity={0.86}
+        />
+      </mesh>
+
+      <mesh
+        castShadow
+        receiveShadow
+        position={[
+          fairing.collarPosition.x,
+          connectorCenterY + 0.92,
+          connectorCenterZ - 0.1,
+        ]}
+        rotation={[0.12, 0, 0]}
+        scale={[1.45, 0.72, 1.88]}
+      >
+        <sphereGeometry args={[0.38, 28, 20]} />
+        <meshPhysicalMaterial
+          color="#7a8592"
+          metalness={0.28}
+          roughness={0.42}
+          clearcoat={0.12}
+          clearcoatRoughness={0.18}
+          envMapIntensity={0.74}
         />
       </mesh>
 

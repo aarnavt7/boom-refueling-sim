@@ -4,18 +4,18 @@ import { LandingPage } from "@/components/landing/LandingPage";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Boom — refueling boom sim",
+    absolute: "Pathlight — accessibility navigation twin",
   },
-  description: "Browser 3D refueling boom simulator with passive visible/thermal sensing, EMCON mission profiles, and ECEF-commanded autonomous boom control.",
+  description: "Browser 3D accessibility navigation simulator for blind and low-vision travelers, with landmark-guided routing, hazard rerouting, and replay.",
   openGraph: {
-    title: "Boom — refueling boom sim",
-    description: "Dock with confidence. Open the sim to evaluate passive multispectral boom control in your browser.",
+    title: "Pathlight — accessibility navigation twin",
+    description: "Compare baseline vs accessibility-aware routing in a 3D airport journey digital twin.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Boom — refueling boom sim",
-    description: "Browser refueling boom simulation with passive visible/thermal sensing and replay.",
+    title: "Pathlight — accessibility navigation twin",
+    description: "Browser accessibility navigation simulation with route comparison and replay.",
   },
 };
 

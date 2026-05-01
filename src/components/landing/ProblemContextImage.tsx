@@ -8,7 +8,7 @@ export function ProblemContextImage() {
       <div className="relative aspect-[16/9] w-full">
         <Image
           src={SRC}
-          alt="Tanker and receiver aircraft — aerial refueling context"
+          alt="Pathlight terminal environment showing the indoor navigation context"
           fill
           className="object-cover"
           sizes="(max-width: 768px) 100vw, min(1152px, 100vw)"
