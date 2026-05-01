@@ -168,6 +168,24 @@ export function FloatingHudPanel({
     writeStoredLayout(panelId, position);
   }, [isDesktop, panelId, position]);
 
+  useEffect(() => {
+    if (!isDesktop || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      setPosition((current) => (current ? clampPosition(current) : current));
+    });
+
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [className, isDesktop]);
+
   const dragHandle = useMemo(
     () =>
       isDesktop ? (

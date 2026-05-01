@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   ACTIONS,
   EVENTS,
@@ -18,6 +18,12 @@ import {
   getOrientationTourDefinitions,
   type OrientationTourStepDefinition,
 } from "@/lib/onboarding/tourConfig";
+import {
+  ensureOnboardingTargetVisible,
+  hasOnboardingTarget,
+  isOnboardingTargetReady,
+  resolveOnboardingTarget,
+} from "@/lib/onboarding/targeting";
 import { useOnboardingStore } from "@/lib/store/onboardingStore";
 
 const COMPACT_TOUR_BREAKPOINT = 1024;
@@ -50,14 +56,6 @@ function getResolvedIndex(
   return Math.min(Math.max(0, tourStepIndex), definitions.length - 1);
 }
 
-function hasTarget(selector: string) {
-  if (typeof document === "undefined") {
-    return false;
-  }
-
-  return document.querySelector(selector) instanceof HTMLElement;
-}
-
 export function GuidedTour() {
   const hasHydrated = useOnboardingStore((state) => state.hasHydrated);
   const status = useOnboardingStore((state) => state.status);
@@ -68,6 +66,7 @@ export function GuidedTour() {
   const dismissOrientationTour = useOnboardingStore((state) => state.dismissOrientationTour);
   const completeOrientationTour = useOnboardingStore((state) => state.completeOrientationTour);
   const [isCompact, setIsCompact] = useState(getIsCompactViewport);
+  const [targetRefreshKey, setTargetRefreshKey] = useState(0);
 
   useEffect(() => {
     const updateViewportMode = () => {
@@ -82,10 +81,12 @@ export function GuidedTour() {
   const definitions = getOrientationTourDefinitions(isCompact);
   const resolvedIndex = getResolvedIndex(definitions, tourStepIndex, tourCurrentStepId);
   const activeDefinition = definitions[resolvedIndex] ?? null;
+  const activeDefinitionId = activeDefinition?.id ?? null;
+  const activeDefinitionSelector = activeDefinition?.selector ?? null;
   const run = hasHydrated && status === "tour" && !isDismissed && definitions.length > 0;
 
   useEffect(() => {
-    if (!run || !activeDefinition) {
+    if (!run || !activeDefinitionSelector) {
       return;
     }
 
@@ -96,6 +97,7 @@ export function GuidedTour() {
     setTourProgress(resolvedIndex, activeDefinition.id);
   }, [
     activeDefinition,
+    activeDefinitionSelector,
     resolvedIndex,
     run,
     setTourProgress,
@@ -121,11 +123,46 @@ export function GuidedTour() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [dismissOrientationTour, run]);
 
+  useLayoutEffect(() => {
+    if (!run || !activeDefinitionId || !activeDefinitionSelector) {
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    let frameId = 0;
+    const padding = isCompact ? 10 : 16;
+
+    const syncTarget = () => {
+      if (cancelled) {
+        return;
+      }
+
+      ensureOnboardingTargetVisible(activeDefinitionSelector, { padding });
+      setTargetRefreshKey((current) => current + 1);
+      attempts += 1;
+
+      if (attempts < 8 && !isOnboardingTargetReady(activeDefinitionSelector, { padding })) {
+        frameId = window.requestAnimationFrame(syncTarget);
+      }
+    };
+
+    syncTarget();
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeDefinitionId, activeDefinitionSelector, isCompact, run]);
+
+  void targetRefreshKey;
+
   const steps: Step[] = definitions.map((definition) => {
-    const targetExists = hasTarget(definition.selector);
+    const target = resolveOnboardingTarget(definition.selector);
+    const targetExists = target !== null;
 
     return {
-      target: targetExists ? definition.selector : "body",
+      target: target ?? "body",
       placement: targetExists
         ? isCompact
           ? definition.mobilePlacement
@@ -187,8 +224,10 @@ export function GuidedTour() {
     setTourProgress(nextIndex, definitions[nextIndex]?.id ?? null);
   }
 
-  const activeSelector =
-    run && activeDefinition && hasTarget(activeDefinition.selector) ? activeDefinition.selector : null;
+  const activeSpotlightSelector =
+    run && activeDefinitionSelector && hasOnboardingTarget(activeDefinitionSelector)
+      ? activeDefinitionSelector
+      : null;
 
   function Tooltip({ index, size, step, tooltipProps, controls }: TooltipRenderProps) {
     return (
@@ -271,7 +310,7 @@ export function GuidedTour() {
 
   return (
     <>
-      <SpotlightOverlay selector={activeSelector} active={run} compact={isCompact} />
+      <SpotlightOverlay selector={activeSpotlightSelector} active={run} compact={isCompact} />
       <Joyride
         continuous
         locale={{

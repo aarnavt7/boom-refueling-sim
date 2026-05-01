@@ -4,15 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { CycleControl } from "@/components/hud/CycleControl";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
-import {
-  AIRCRAFT_CARD_OPTIONS,
-  AUTONOMY_UPLOAD_HELP,
-  CAMERA_MODE_OPTIONS,
-  SAMPLE_CONTROLLER_SOURCE,
-  SAMPLE_MISSION_JSON,
-} from "@/lib/sim/autonomyCatalog";
+import { AIRCRAFT_CARD_OPTIONS, CAMERA_MODE_OPTIONS } from "@/lib/sim/autonomyCatalog";
 import { scenarioPresets } from "@/lib/sim/scenarios";
-import { createAutonomyManifest } from "@/lib/sim/autonomyUpload";
 import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
@@ -32,38 +25,33 @@ const SETUP_STEPS: Array<{
 }> = [
   {
     id: "aircraft",
-    label: "Aircraft",
-    title: "Pick the aircraft card",
-    detail:
-      "Choose the pairing you want to present.",
+    label: "Profile",
+    title: "Pick the traveler mode",
+    detail: "Choose the accessibility profile you want to demonstrate first.",
   },
   {
     id: "scenario",
-    label: "Scenario",
-    title: "Set the mission preset",
-    detail:
-      "Dial in the environment and intercept profile.",
+    label: "Preset",
+    title: "Set the journey preset",
+    detail: "Choose the airport situation you want to compare before and after Pathlight routing.",
   },
   {
     id: "camera",
     label: "Camera",
     title: "Choose the scene camera",
-    detail:
-      "Manual orbit is the default so you can drag around the formation right away.",
+    detail: "Free orbit is the default so you can inspect the terminal and route graph immediately.",
   },
   {
     id: "autonomy",
-    label: "Autonomy",
-    title: "Optional upload",
-    detail:
-      "Add controller.js and mission.json, or skip this step.",
+    label: "Output",
+    title: "Preview the assistive output",
+    detail: "See how the same route turns into landmark-first blind guidance or a low-vision simplified scene.",
   },
   {
     id: "review",
     label: "Review",
     title: "Review and launch",
-    detail:
-      "Sanity-check the setup, then start the quick tour or jump straight into a live run.",
+    detail: "Sanity-check the setup, then start the quick tour or jump straight into a live journey.",
   },
 ];
 
@@ -89,7 +77,6 @@ function SetupSummaryRow({
 export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const selectedScenarioId = useUiStore((state) => state.selectedScenarioId);
   const selectedAircraftCardId = useUiStore((state) => state.selectedAircraftCardId);
   const cameraMode = useUiStore((state) => state.cameraMode);
@@ -106,9 +93,6 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
   const stopLiveRun = useUiStore((state) => state.stopLiveRun);
   const setScenarioById = useSimStore((state) => state.setScenarioById);
   const resetScenario = useSimStore((state) => state.resetScenario);
-  const lastAutonomyUpload = useSimStore((state) => state.lastAutonomyUpload);
-  const setLastAutonomyUpload = useSimStore((state) => state.setLastAutonomyUpload);
-  const setAutonomyEvaluation = useSimStore((state) => state.setAutonomyEvaluation);
 
   useEffect(() => {
     if (!open) {
@@ -143,19 +127,10 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
   }
 
   const currentStep = SETUP_STEPS[stepIndex] ?? SETUP_STEPS[0];
-  const selectedScenario =
-    scenarioPresets.find((scenario) => scenario.id === selectedScenarioId) ?? scenarioPresets[0];
-  const selectedAircraftCard =
-    AIRCRAFT_CARD_OPTIONS.find((option) => option.id === selectedAircraftCardId) ??
-    AIRCRAFT_CARD_OPTIONS[0];
-  const selectedCamera =
-    CAMERA_MODE_OPTIONS.find((option) => option.id === cameraMode) ?? CAMERA_MODE_OPTIONS[0];
-  const selectedScenarioIndex = scenarioPresets.findIndex(
-    (scenario) => scenario.id === selectedScenarioId,
-  );
-  const hasAutonomyUpload = Boolean(
-    lastAutonomyUpload?.controllerSource || lastAutonomyUpload?.missionJson,
-  );
+  const selectedScenario = scenarioPresets.find((scenario) => scenario.id === selectedScenarioId) ?? scenarioPresets[0];
+  const selectedProfile = AIRCRAFT_CARD_OPTIONS.find((option) => option.id === selectedAircraftCardId) ?? AIRCRAFT_CARD_OPTIONS[0];
+  const selectedCamera = CAMERA_MODE_OPTIONS.find((option) => option.id === cameraMode) ?? CAMERA_MODE_OPTIONS[0];
+  const selectedScenarioIndex = scenarioPresets.findIndex((scenario) => scenario.id === selectedScenarioId);
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === SETUP_STEPS.length - 1;
   const progressPercent = ((stepIndex + 1) / SETUP_STEPS.length) * 100;
@@ -176,35 +151,7 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
     setScenarioById(nextScenario.id);
   }
 
-  async function readUpload(file: File | null, kind: "controller" | "mission") {
-    if (!file) {
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      const nextManifest = createAutonomyManifest({
-        ...(lastAutonomyUpload ?? {}),
-        controllerName:
-          kind === "controller" ? file.name : lastAutonomyUpload?.controllerName ?? null,
-        controllerSource:
-          kind === "controller" ? text : lastAutonomyUpload?.controllerSource ?? null,
-        missionName: kind === "mission" ? file.name : lastAutonomyUpload?.missionName ?? null,
-        missionJson: kind === "mission" ? text : lastAutonomyUpload?.missionJson ?? null,
-        uploadedAt: Date.now(),
-      });
-
-      setLastAutonomyUpload(nextManifest);
-      setAutonomyEvaluation(null);
-      setUploadMessage(`Loaded ${file.name}.`);
-    } catch (error) {
-      setUploadMessage(
-        error instanceof Error ? error.message : "Unable to read uploaded file.",
-      );
-    }
-  }
-
-  function launchMission() {
+  function launchJourney() {
     setReplayMode(false);
     setReplayPlaying(false);
     setReplayIndex(0);
@@ -221,14 +168,9 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
     if (currentStep.id === "aircraft") {
       return (
         <div className="space-y-3 rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-                Aircraft card
-              </p>
-           </div>
-
-          </div>
+          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+            Traveler mode
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {AIRCRAFT_CARD_OPTIONS.map((option) => {
               const active = option.id === selectedAircraftCardId;
@@ -237,7 +179,10 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => setSelectedAircraftCardId(option.id)}
+                  onClick={() => {
+                    setSelectedAircraftCardId(option.id);
+                    resetScenario(selectedScenarioId);
+                  }}
                   data-gamepad-focus-id={`welcome-aircraft-${option.id}`}
                   data-gamepad-group="welcome-aircraft"
                   data-gamepad-scope="overlay"
@@ -255,7 +200,7 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
                     {option.subtitle}
                   </p>
                   <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-                    {option.tanker} to {option.receiver}
+                    {option.tanker} · {option.receiver}
                   </p>
                 </button>
               );
@@ -269,13 +214,13 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
       return (
         <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-3">
           <CycleControl
-            label="Scenario"
+            label="Journey preset"
             valueLabel={selectedScenario.name}
             detail={selectedScenario.description}
             onPrevious={() => cycleScenario(-1)}
             onNext={() => cycleScenario(1)}
-            previousLabel="Previous scenario"
-            nextLabel="Next scenario"
+            previousLabel="Previous journey preset"
+            nextLabel="Next journey preset"
             gamepadBaseId="welcome-scenario"
             gamepadGroup="welcome-config"
             gamepadScope="overlay"
@@ -326,90 +271,27 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
     if (currentStep.id === "autonomy") {
       return (
         <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-                Upload autonomy
-              </p>
-              <p className="mt-1 max-w-[32rem] font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-                {AUTONOMY_UPLOAD_HELP}
+          <div className="space-y-2">
+            <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+              Assistive output
+            </p>
+            <p className="max-w-[32rem] font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+              Pathlight keeps the exact same terminal journey but changes how the route is communicated depending on the traveler profile.
+            </p>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[16px] border border-[color:var(--hud-line)] bg-black/15 px-3 py-3">
+              <p className="font-sans text-[12px] font-medium text-[color:var(--hud-fg)]">Blind mode</p>
+              <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+                Landmark-first prompts, short distance bands, and clock-direction hints reduce cognitive load in noisy spaces.
               </p>
             </div>
-            <HudButton
-              variant="ghost"
-              data-gamepad-focus-id="welcome-load-demo"
-              data-gamepad-group="welcome-upload"
-              data-gamepad-scope="overlay"
-              data-gamepad-label="Load demo autonomy upload"
-              onClick={() => {
-                setLastAutonomyUpload(
-                  createAutonomyManifest({
-                    controllerName: "sample-controller.js",
-                    controllerSource: SAMPLE_CONTROLLER_SOURCE,
-                    missionName: "sample-mission.json",
-                    missionJson: SAMPLE_MISSION_JSON,
-                  }),
-                );
-                setAutonomyEvaluation(null);
-                setUploadMessage("Loaded the built-in demo upload.");
-              }}
-            >
-              Load demo
-            </HudButton>
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 font-sans text-[11px] text-[color:var(--hud-muted)]">
-              controller.js
-              <input
-                type="file"
-                accept=".js,text/javascript,application/javascript"
-                className="tactical-file"
-                onChange={(event) => {
-                  void readUpload(event.target.files?.[0] ?? null, "controller");
-                }}
-              />
-              <span className="text-[color:var(--hud-fg)]">
-                {lastAutonomyUpload?.controllerName ?? "No controller loaded"}
-              </span>
-            </label>
-            <label className="flex flex-col gap-1 font-sans text-[11px] text-[color:var(--hud-muted)]">
-              mission.json
-              <input
-                type="file"
-                accept=".json,application/json"
-                className="tactical-file"
-                onChange={(event) => {
-                  void readUpload(event.target.files?.[0] ?? null, "mission");
-                }}
-              />
-              <span className="text-[color:var(--hud-fg)]">
-                {lastAutonomyUpload?.missionName ?? "No mission data loaded"}
-              </span>
-            </label>
-          </div>
-
-          {uploadMessage ? (
-            <p className="mt-3 font-sans text-[11px] text-[color:var(--hud-accent-fg)]">
-              {uploadMessage}
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <HudButton
-              variant="ghost"
-              data-gamepad-focus-id="welcome-clear-upload"
-              data-gamepad-group="welcome-upload"
-              data-gamepad-scope="overlay"
-              data-gamepad-label="Clear uploaded autonomy files"
-              onClick={() => {
-                setLastAutonomyUpload(null);
-                setAutonomyEvaluation(null);
-                setUploadMessage("Cleared uploaded autonomy files.");
-              }}
-            >
-              Clear upload
-            </HudButton>
+            <div className="rounded-[16px] border border-[color:var(--hud-line)] bg-black/15 px-3 py-3">
+              <p className="font-sans text-[12px] font-medium text-[color:var(--hud-fg)]">Low-vision mode</p>
+              <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+                The scene simplifies around the walking path, raises contrast, and highlights landmarks before the traveler reaches a decision point.
+              </p>
+            </div>
           </div>
         </div>
       );
@@ -419,29 +301,14 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
       <div className="space-y-3">
         <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-3">
           <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-            Mission review
+            Journey review
           </p>
           <div className="mt-2">
-            <SetupSummaryRow label="Aircraft card" value={selectedAircraftCard.label} />
-            <SetupSummaryRow label="Scenario" value={selectedScenario.name} />
+            <SetupSummaryRow label="Traveler mode" value={selectedProfile.label} />
+            <SetupSummaryRow label="Journey preset" value={selectedScenario.name} />
             <SetupSummaryRow label="Camera mode" value={selectedCamera.label} />
-            <SetupSummaryRow
-              label="Autonomy upload"
-              value={hasAutonomyUpload ? "Loaded" : "None"}
-            />
+            <SetupSummaryRow label="Assistive output" value={selectedProfile.subtitle} />
           </div>
-        </div>
-
-        <div className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/20 px-3 py-3">
-          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-            Why the Xbox-style controller is here
-          </p>
-          <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-fg)]">
-            Boom uses an Xbox-style controller because this is a simulator and debrief tool. Air Force aerial refueling already depends on simulator training, and defense organizations already use familiar commercial controller patterns when they reduce training friction.
-          </p>
-          <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-            In Boom, the controller is a low-cost operator console for inspection, scenario control, breakaway input, and replay review.
-          </p>
         </div>
       </div>
     );
@@ -458,7 +325,7 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
       <div className="absolute inset-0" style={backdropStyle} aria-hidden="true" />
       <div className="relative w-full max-w-[35rem] animate-onboarding-fade-up">
         <TacticalPanel
-          title="Mission setup"
+          title="Pathlight setup"
           subtitle={currentStep.label}
           scrollBody
           className="max-h-[min(48rem,calc(100dvh-2rem))] rounded-[26px] shadow-[0_28px_80px_rgba(0,0,0,0.5)]"
@@ -485,27 +352,17 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
-                <div
-                  className="h-full rounded-full bg-[color:var(--hud-accent)]"
-                  style={{ width: `${progressPercent}%` }}
-                />
+                <div className="h-full rounded-full bg-[color:var(--hud-accent)]" style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
 
             <div className="space-y-2">
-              <h2
-                id="onboarding-welcome-title"
-                className="font-sans text-[1.05rem] font-semibold tracking-tight text-[color:var(--hud-fg)] sm:text-[1.15rem]"
-              >
+              <h2 id="onboarding-welcome-title" className="font-sans text-[1.05rem] font-semibold tracking-tight text-[color:var(--hud-fg)] sm:text-[1.15rem]">
                 {currentStep.title}
               </h2>
               <p className="max-w-[34rem] font-sans text-sm leading-relaxed text-[color:var(--hud-muted)]">
                 {currentStep.detail}
               </p>
-              {!isLastStep ? (
-                <p className="max-w-[34rem] font-sans text-[12px] leading-relaxed text-[color:var(--hud-accent-fg)]">
-                </p>
-              ) : null}
             </div>
 
             {renderStepContent()}
@@ -548,7 +405,7 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
                   data-gamepad-default="true"
                   onClick={goToNextStep}
                 >
-                  {currentStep.id === "autonomy" ? "Review mission" : "Continue"}
+                  {currentStep.id === "autonomy" ? "Review journey" : "Continue"}
                 </HudButton>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -569,10 +426,10 @@ export function WelcomeModal({ open, onStart, onSkip }: WelcomeModalProps) {
                     data-gamepad-focus-id="welcome-launch-live"
                     data-gamepad-group="welcome-actions"
                     data-gamepad-scope="overlay"
-                    data-gamepad-label="Launch live run"
-                    onClick={launchMission}
+                    data-gamepad-label="Launch live journey"
+                    onClick={launchJourney}
                   >
-                    Launch live run
+                    Launch live journey
                   </HudButton>
                 </div>
               )}

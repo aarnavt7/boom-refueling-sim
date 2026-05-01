@@ -30,7 +30,7 @@ export function LandingNav() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:px-8">
         <Link href="/#main-content" className="group flex min-w-0 items-center gap-2">
           <Image src="/boom-logo.svg" alt="" width={28} height={28} className="shrink-0" priority />
-          <span className="truncate font-sans text-[13px] font-semibold tracking-tight text-landing-fg">Boom</span>
+          <span className="truncate font-sans text-[13px] font-semibold tracking-tight text-landing-fg">Pathlight</span>
         </Link>
 
         <nav
@@ -53,7 +53,7 @@ export function LandingNav() {
             href="/sim"
             className="rounded-full bg-ember px-3.5 py-2 font-sans text-[12px] font-semibold text-white shadow-[0_0_20px_rgba(227,107,23,0.22)] transition hover:bg-[#ea7a2c] sm:px-4"
           >
-            Open sim
+            Open Pathlight
           </Link>
         </div>
       </div>

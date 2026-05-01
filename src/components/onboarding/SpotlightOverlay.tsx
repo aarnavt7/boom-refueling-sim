@@ -2,6 +2,11 @@
 
 import { useLayoutEffect, useMemo, useState } from "react";
 
+import {
+  ensureOnboardingTargetVisible,
+  resolveOnboardingTarget,
+} from "@/lib/onboarding/targeting";
+
 type SpotlightOverlayProps = {
   selector: string | null;
   active: boolean;
@@ -30,14 +35,14 @@ function getViewportState(): ViewportState {
 }
 
 function resolveTarget(selector: string | null) {
-  if (!selector || typeof document === "undefined") {
+  if (!selector) {
     return null;
   }
 
-  return document.querySelector<HTMLElement>(selector);
+  return resolveOnboardingTarget(selector);
 }
 
-function useSpotlightState(selector: string | null, active: boolean) {
+function useSpotlightState(selector: string | null, active: boolean, compact: boolean) {
   const [state, setState] = useState<SpotlightState>({
     rect: null,
     viewport: getViewportState(),
@@ -54,19 +59,58 @@ function useSpotlightState(selector: string | null, active: boolean) {
 
     let target = resolveTarget(selector);
     const documentElement = typeof document !== "undefined" ? document.documentElement : null;
+    let frameId = 0;
+    let attempts = 0;
+    const padding = compact ? 10 : 12;
 
     const update = () => {
+      ensureOnboardingTargetVisible(selector, { padding });
       target = resolveTarget(selector);
-      setState({
-        rect: target?.getBoundingClientRect() ?? null,
-        viewport: getViewportState(),
+      const nextRect = target?.getBoundingClientRect() ?? null;
+      const nextViewport = getViewportState();
+
+      setState((current) => {
+        const currentRect = current.rect;
+        const rectUnchanged =
+          currentRect?.left === nextRect?.left &&
+          currentRect?.top === nextRect?.top &&
+          currentRect?.width === nextRect?.width &&
+          currentRect?.height === nextRect?.height;
+        const viewportUnchanged =
+          current.viewport.width === nextViewport.width &&
+          current.viewport.height === nextViewport.height;
+
+        if (rectUnchanged && viewportUnchanged) {
+          return current;
+        }
+
+        return {
+          rect: nextRect,
+          viewport: nextViewport,
+        };
       });
     };
 
-    update();
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        update();
+      });
+    };
+
+    const updateUntilResolved = () => {
+      scheduleUpdate();
+      attempts += 1;
+
+      if (attempts < 8 && !resolveTarget(selector)) {
+        frameId = window.requestAnimationFrame(updateUntilResolved);
+      }
+    };
+
+    updateUntilResolved();
 
     const resizeObserver =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => update()) : null;
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => scheduleUpdate()) : null;
 
     if (target) {
       resizeObserver?.observe(target);
@@ -75,21 +119,22 @@ function useSpotlightState(selector: string | null, active: boolean) {
       resizeObserver?.observe(documentElement);
     }
 
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
 
     return () => {
+      window.cancelAnimationFrame(frameId);
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
     };
-  }, [active, selector]);
+  }, [active, compact, selector]);
 
   return state;
 }
 
 export function SpotlightOverlay({ selector, active, compact }: SpotlightOverlayProps) {
-  const { rect, viewport } = useSpotlightState(selector, active);
+  const { rect, viewport } = useSpotlightState(selector, active, compact);
 
   const padding = compact ? 10 : 12;
   const overlayStyle = useMemo(
@@ -103,6 +148,10 @@ export function SpotlightOverlay({ selector, active, compact }: SpotlightOverlay
   );
 
   if (!active) {
+    return null;
+  }
+
+  if (selector && (!rect || viewport.width === 0 || viewport.height === 0)) {
     return null;
   }
 

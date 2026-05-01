@@ -18,27 +18,27 @@ export const SENSOR_VIEWPORT_SOURCE_OPTIONS: Array<{
   {
     id: "auto",
     label: "Auto",
-    detail: "Follow the currently most useful assistive cue.",
+    detail: "Follow the current perception handoff sensor.",
   },
   {
     id: "tail-acq-left",
-    label: "Audio",
-    detail: "Prioritize the spoken cue stack and clock-direction prompt.",
+    label: "Tail L",
+    detail: "Left wide-FOV acquisition camera.",
   },
   {
     id: "tail-acq-right",
-    label: "Landmarks",
-    detail: "Preview the next landmark callout and spatial anchor.",
+    label: "Tail R",
+    detail: "Right wide-FOV acquisition camera.",
   },
   {
     id: "boom-term-left",
-    label: "Hazards",
-    detail: "Surface the next closure, queue, or caution event first.",
+    label: "Term L",
+    detail: "Left narrow-FOV terminal camera.",
   },
   {
     id: "boom-term-right",
-    label: "Route glow",
-    detail: "Emphasize the simplified low-vision route treatment.",
+    label: "Term R",
+    detail: "Right narrow-FOV terminal camera.",
   },
 ];
 
@@ -50,17 +50,17 @@ export const SENSOR_VIEWPORT_MODALITY_OPTIONS: Array<{
   {
     id: "auto",
     label: "Auto",
-    detail: "Match the active traveler profile automatically.",
+    detail: "Follow the selected sensor's current modality.",
   },
   {
     id: "visible",
-    label: "Low vision",
-    detail: "Preview the contrast-rich, clutter-reduced visual assist mode.",
+    label: "Visible",
+    detail: "Show the raw visible-spectrum viewport.",
   },
   {
     id: "thermal",
-    label: "Blind mode",
-    detail: "Preview the spoken, landmark-first guidance stack.",
+    label: "Thermal",
+    detail: "Apply the false-color thermal presentation.",
   },
 ];
 
@@ -154,7 +154,9 @@ export function getSensorViewportRenderKey({
     replayMode ? "replay" : "live",
     replayDataSource,
     evaluationView,
-    replayMode ? replayIndex : "live-session",
+    replayIndex,
+    state.frame,
+    state.simTime.toFixed(3),
     resolved.effectiveSensorId,
     resolved.effectiveModality,
   ].join("|");

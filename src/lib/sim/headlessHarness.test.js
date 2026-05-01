@@ -1,187 +1,145 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  BENCHMARK_SCENARIO_IDS,
-  evaluateBenchmarkSummary,
-  formatBenchmarkEvaluation,
-  getScenarioBenchmarkContract,
-} from "./benchmarkProfiles.ts";
-import { runHeadlessScenario } from "./headlessHarness.ts";
+import { buildPathlightComparisonBundle, buildPathlightLiveState } from "./pathlightEngine.ts";
 import { getScenarioById } from "./scenarios.ts";
 
-const DT = 1 / 60;
+const SCENARIO_IDS = [
+  "steady-approach",
+  "crosswind-chase",
+  "sensor-degraded",
+  "night-water-passive",
+];
 
-function runContractScenario(scenarioId) {
-  const contract = getScenarioBenchmarkContract(scenarioId);
-
-  return runHeadlessScenario({
-    scenarioId,
-    durationSeconds: contract.mateBySeconds,
-    dt: DT,
-    stopOnDocked: true,
-  });
+function getLastSample(samples) {
+  const sample = samples.at(-1);
+  expect(sample).toBeDefined();
+  return sample;
 }
 
-function expectStableNullableNumber(actual, expected, digits) {
-  if (expected === null || actual === null) {
-    expect(actual).toBe(expected);
-    return;
-  }
-
-  expect(actual).toBeCloseTo(expected, digits);
+function meanMetric(samples, selector) {
+  return (
+    samples.reduce((sum, sample) => sum + selector(sample), 0) /
+    Math.max(samples.length, 1)
+  );
 }
 
-describe("headless scenario contracts", () => {
-  test("all benchmark scenarios satisfy the objective backend contract matrix", () => {
-    const failures = [];
+describe("Pathlight journey contracts", () => {
+  for (const scenarioId of SCENARIO_IDS) {
+    test(`${scenarioId} completes both the baseline and accessibility-aware journeys`, () => {
+      const comparison = buildPathlightComparisonBundle({
+        scenario: getScenarioById(scenarioId),
+        profileId: "kc46_f15",
+      });
 
-    for (const scenarioId of BENCHMARK_SCENARIO_IDS) {
-      const summary = runContractScenario(scenarioId);
-      const evaluation = evaluateBenchmarkSummary(summary);
+      const baselineLast = getLastSample(comparison.baselineReplaySamples);
+      const uploadedLast = getLastSample(comparison.uploadedReplaySamples);
 
-      if (!evaluation.pass) {
-        failures.push(formatBenchmarkEvaluation(summary, evaluation));
-      }
-    }
-
-    if (failures.length > 0) {
-      throw new Error(failures.join("\n"));
-    }
-  });
-});
-
-describe("headless scenario determinism", () => {
-  for (const scenarioId of BENCHMARK_SCENARIO_IDS) {
-    test(`${scenarioId} remains deterministic across repeated runs`, () => {
-      const runs = Array.from({ length: 3 }, () => runContractScenario(scenarioId));
-      const reference = runs[0];
-
-      for (const current of runs.slice(1)) {
-        expect(current.finalState).toBe(reference.finalState);
-        expect(current.abortReason).toBe(reference.abortReason);
-        expectStableNullableNumber(current.dockedAt, reference.dockedAt, 10);
-        expect(current.minPositionError).toBeCloseTo(reference.minPositionError, 10);
-        expect(current.dropoutCount).toBe(reference.dropoutCount);
-        expect(current.finalTrackerConfidence).toBeCloseTo(reference.finalTrackerConfidence, 12);
-        expect(current.visibleFraction).toBeCloseTo(reference.visibleFraction, 12);
-        expect(current.stateFrameCounts).toEqual(reference.stateFrameCounts);
-        expect(current.firstStateAt).toEqual(reference.firstStateAt);
-        expect(current.preferredRoleFrameCounts).toEqual(reference.preferredRoleFrameCounts);
-      }
+      expect(baselineLast.controllerState).toBe("MATED");
+      expect(uploadedLast.controllerState).toBe("MATED");
+      expect(baselineLast.journey?.distanceRemaining).toBeLessThanOrEqual(0.001);
+      expect(uploadedLast.journey?.distanceRemaining).toBeLessThanOrEqual(0.001);
     });
   }
 });
 
-describe("headless safety and negative cases", () => {
-  test("manual abort forces breakaway and never allows a mated success", () => {
-    const result = runHeadlessScenario({
-      scenarioId: "steady-approach",
-      durationSeconds: 12,
-      dt: DT,
-      manualAbortAt: 1.5,
-      stopOnDocked: true,
-    });
+describe("Pathlight journey determinism", () => {
+  for (const scenarioId of SCENARIO_IDS) {
+    test(`${scenarioId} remains deterministic across repeated comparison builds`, () => {
+      const scenario = getScenarioById(scenarioId);
+      const first = buildPathlightComparisonBundle({
+        scenario,
+        profileId: "kc46_f15",
+      });
+      const second = buildPathlightComparisonBundle({
+        scenario,
+        profileId: "kc46_f15",
+      });
 
-    expect(["BREAKAWAY", "ABORT"]).toContain(result.finalState);
-    expect(result.finalState).not.toBe("MATED");
-    expect(result.dockedAt).toBeNull();
-    expect(result.abortReason).toBe("Manual breakaway commanded");
-    expect(result.stateFrameCounts.MATED).toBeUndefined();
-    expect(result.firstStateAt.MATED).toBeUndefined();
-  });
-
-  test("an impossible out-of-range scenario never reaches INSERT or MATED", () => {
-    const baseScenario = getScenarioById("steady-approach");
-    const impossibleScenario = {
-      ...baseScenario,
-      id: "impossible-out-of-range",
-      name: "Impossible Out Of Range",
-      receiverBasePose: {
-        position: { x: 0.35, y: -2.82, z: 96 },
-        rotation: { ...baseScenario.receiverBasePose.rotation },
-      },
-    };
-
-    const result = runHeadlessScenario({
-      scenario: impossibleScenario,
-      durationSeconds: 10,
-      dt: DT,
-      stopOnDocked: true,
-    });
-
-    expect(result.finalState).not.toBe("MATED");
-    expect(result.dockedAt).toBeNull();
-    expect(result.visibleFraction).toBe(0);
-    expect(result.finalTrackerConfidence).toBe(0);
-    expect(result.stateFrameCounts.INSERT).toBeUndefined();
-    expect(result.stateFrameCounts.MATED).toBeUndefined();
-    expect(result.firstStateAt.INSERT).toBeUndefined();
-    expect(result.firstStateAt.MATED).toBeUndefined();
-  });
-});
-
-describe("headless docking lock", () => {
-  test("once mated, the boom stays locked to the receptacle instead of drifting off target", () => {
-    const result = runHeadlessScenario({
-      scenarioId: "steady-approach",
-      durationSeconds: 14,
-      dt: DT,
-      stopOnDocked: false,
-    });
-
-    expect(result.dockedAt).not.toBeNull();
-    expect(result.finalState).toBe("MATED");
-    expect(result.finalMetrics.positionError).toBeLessThan(0.02);
-  });
-});
-
-describe("headless autonomy perturbations", () => {
-  test("uploaded motion perturbations create a measurably different yet deterministic replay", () => {
-    const baseline = runHeadlessScenario({
-      scenarioId: "steady-approach",
-      durationSeconds: 8,
-      dt: DT,
-      collectReplay: true,
-    });
-    const perturbations = baseline.replaySamples.map((sample, index) =>
-      index >= 45 && index <= 120
-        ? {
-            positionDelta: {
-              x: 0.024,
-              y: 0.012,
-              z: 0,
-            },
-          }
-        : null,
-    );
-
-    const uploadedA = runHeadlessScenario({
-      scenarioId: "steady-approach",
-      durationSeconds: 8,
-      dt: DT,
-      collectReplay: true,
-      autonomyOutputs: perturbations,
-    });
-    const uploadedB = runHeadlessScenario({
-      scenarioId: "steady-approach",
-      durationSeconds: 8,
-      dt: DT,
-      collectReplay: true,
-      autonomyOutputs: perturbations,
-    });
-    const diverged = uploadedA.replaySamples.some((sample, index) => {
-      const reference = baseline.replaySamples[index];
-      return (
-        reference !== undefined &&
-        Math.abs(sample.receiverPose.position.x - reference.receiverPose.position.x) > 0.01
+      expect(first.report.summary.meanDistanceOffset).toBeCloseTo(
+        second.report.summary.meanDistanceOffset,
+        10,
       );
+      expect(first.report.summary.averageConfidence).toBeCloseTo(
+        second.report.summary.averageConfidence,
+        10,
+      );
+      expect(first.uploadedReplaySamples.length).toBe(second.uploadedReplaySamples.length);
+      expect(first.baselineReplaySamples.length).toBe(second.baselineReplaySamples.length);
+
+      const firstLast = getLastSample(first.uploadedReplaySamples);
+      const secondLast = getLastSample(second.uploadedReplaySamples);
+      expect(firstLast.metrics.accessibilityScore).toBeCloseTo(
+        secondLast.metrics.accessibilityScore,
+        10,
+      );
+      expect(firstLast.journey?.rerouteCount).toBe(secondLast.journey?.rerouteCount);
+    });
+  }
+});
+
+describe("Pathlight route selection and rerouting", () => {
+  test("prefers the calmer landmark-rich route over the shortest corridor in the normal trip", () => {
+    const comparison = buildPathlightComparisonBundle({
+      scenario: getScenarioById("steady-approach"),
+      profileId: "kc46_f15",
     });
 
-    expect(diverged).toBe(true);
-    expect(uploadedA.finalMetrics.positionError).toBeCloseTo(
-      uploadedB.finalMetrics.positionError,
-      10,
+    const baselineLast = getLastSample(comparison.baselineReplaySamples);
+    const uploadedLast = getLastSample(comparison.uploadedReplaySamples);
+
+    expect(baselineLast.journey?.routePlan.nodeIds).toContain("north-corridor");
+    expect(uploadedLast.journey?.routePlan.nodeIds).toContain("elevator-lobby");
+    expect(uploadedLast.journey?.routePlan.nodeIds).toContain("south-corridor");
+    expect(uploadedLast.journey?.routePlan.accessibilityScore).toBeGreaterThan(
+      baselineLast.journey?.routePlan.accessibilityScore ?? 0,
     );
-    expectStableNullableNumber(uploadedA.dockedAt, uploadedB.dockedAt, 10);
+  });
+
+  test("reroutes earlier and finishes with lower hazard load during a corridor closure", () => {
+    const comparison = buildPathlightComparisonBundle({
+      scenario: getScenarioById("crosswind-chase"),
+      profileId: "kc46_f15",
+    });
+
+    const baselineLast = getLastSample(comparison.baselineReplaySamples);
+    const uploadedLast = getLastSample(comparison.uploadedReplaySamples);
+
+    expect(baselineLast.journey?.routePlan.edgeIds).toContain("checkpoint-north");
+    expect(uploadedLast.journey?.routePlan.edgeIds).not.toContain("checkpoint-north");
+    expect(uploadedLast.journey?.offRouteEvents ?? Infinity).toBeLessThan(
+      baselineLast.journey?.offRouteEvents ?? -1,
+    );
+    expect(
+      meanMetric(
+        comparison.uploadedReplaySamples,
+        (sample) => sample.metrics.confidence,
+      ),
+    ).toBeGreaterThan(
+      meanMetric(
+        comparison.baselineReplaySamples,
+        (sample) => sample.metrics.confidence,
+      ),
+    );
+    expect(uploadedLast.metrics.accessibilityScore ?? 0).toBeGreaterThan(
+      baselineLast.metrics.accessibilityScore ?? 0,
+    );
+  });
+});
+
+describe("Pathlight guidance prompts", () => {
+  test("emits structured low-vision guidance with landmark and safety language", () => {
+    const seeded = buildPathlightLiveState({
+      scenario: getScenarioById("sensor-degraded"),
+      profileId: "kc135_f16",
+    });
+
+    const prompt = seeded.live.journey?.guidancePrompt;
+    expect(prompt).toBeDefined();
+    expect(prompt?.title.length).toBeGreaterThan(0);
+    expect(prompt?.primary.length).toBeGreaterThan(0);
+    expect(prompt?.landmark.length).toBeGreaterThan(0);
+    expect(prompt?.clockHint).toContain("o'clock");
+    expect(prompt?.distanceLabel).toContain("ahead");
+    expect(prompt?.safetyNote).toContain("High-contrast mode");
   });
 });

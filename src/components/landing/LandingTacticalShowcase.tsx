@@ -13,12 +13,10 @@ export function LandingTacticalShowcase() {
     >
       <p className="font-sans text-[11px] font-medium tracking-[0.04em] text-ember">Live panel</p>
       <h2 className="mt-3 max-w-3xl font-sans text-3xl font-semibold leading-tight tracking-tight text-landing-fg sm:text-4xl">
-        Check out the live panel readout.
+        Check out the live assistive readout.
       </h2>
       <p className="mt-5 max-w-2xl font-sans text-base leading-relaxed text-landing-muted sm:text-lg">
-        The board below shows status text, a tiny camera view, and where you are in the sequence (for example search,
-        align, dock). The values update in real time in your browser from the same run as the frozen capture
-        above—not a prerecorded clip.
+        The board below shows the trip phase, assistive cue preview, and comparison metrics. The values update in real time in your browser from the same journey as the frozen capture above.
       </p>
       <div className="mt-8 flex justify-center">
         <div className="pointer-events-auto w-full max-w-3xl [&_.border]:border-landing-line">

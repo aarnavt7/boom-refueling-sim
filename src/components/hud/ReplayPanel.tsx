@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { formatControllerStateLabel } from "@/components/hud/controllerPresentation";
 import { HudButton, TacticalPanel } from "@/components/hud/tactical-ui";
-import { runAutonomyEvaluation } from "@/lib/sim/autonomyEvaluation";
 import {
   listRunSummaries,
   loadReplay,
@@ -16,9 +14,15 @@ import { useUiStore } from "@/lib/store/uiStore";
 
 export function ReplayPanel({
   className = "min-h-0 lg:h-full",
+  bodyClassName = "",
+  scrollBody = true,
+  headerActions,
   panelDragHandle,
 }: {
   className?: string;
+  bodyClassName?: string;
+  scrollBody?: boolean;
+  headerActions?: ReactNode;
   panelDragHandle?: ReactNode;
 }) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -28,11 +32,9 @@ export function ReplayPanel({
   const scenario = useSimStore((store) => store.scenario);
   const live = useSimStore((store) => store.live);
   const autonomyEvaluation = useSimStore((store) => store.autonomyEvaluation);
-  const lastAutonomyUpload = useSimStore((store) => store.lastAutonomyUpload);
   const persistStatus = useSimStore((store) => store.persistStatus);
   const persistMessage = useSimStore((store) => store.persistMessage);
   const setPersistStatus = useSimStore((store) => store.setPersistStatus);
-  const setAutonomyEvaluation = useSimStore((store) => store.setAutonomyEvaluation);
   const setScenarioById = useSimStore((store) => store.setScenarioById);
   const setReplaySamples = useSimStore((store) => store.setReplaySamples);
   const replayMode = useUiStore((store) => store.replayMode);
@@ -123,39 +125,6 @@ export function ReplayPanel({
     }
   }
 
-  async function runUploadEval() {
-    if (!lastAutonomyUpload) {
-      setPersistStatus("error", "Upload controller.js or mission.json first.");
-      return;
-    }
-
-    setPersistStatus("saving", "Running uploaded autonomy evaluation...");
-    setSaveMessage(null);
-    setReplayPlaying(false);
-    setReplayIndex(0);
-    if (liveRunState === "running") {
-      pauseLiveRun();
-    }
-
-    try {
-      const result = await runAutonomyEvaluation({
-        scenario,
-        manifest: lastAutonomyUpload,
-      });
-
-      setAutonomyEvaluation(result);
-      setReplayDataSource("autonomy");
-      setEvaluationView("overlay");
-      setReplayMode(true);
-      setPersistStatus("saved", "Autonomy evaluation ready.");
-      setSaveMessage("Autonomy evaluation ready.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to run uploaded evaluation.";
-      setPersistStatus("error", message);
-      setSaveMessage(message);
-    }
-  }
-
   async function openSavedReplay(run: SavedRunSummary) {
     setBusyRunId(run.id);
     setPersistStatus("saving", null);
@@ -215,17 +184,17 @@ export function ReplayPanel({
       const link = document.createElement("a");
 
       link.href = url;
-      link.download = `boom-run-${run.scenarioId}-${run.id.slice(0, 8)}.json`;
+      link.download = `pathlight-run-${run.scenarioId}-${run.id.slice(0, 8)}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      const message = `Exported ${run.scenarioName} run JSON.`;
+      const message = `Exported ${run.scenarioName} journey JSON.`;
       setPersistStatus("saved", message);
       setSaveMessage(message);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to export run JSON.";
+      const message = error instanceof Error ? error.message : "Unable to export journey JSON.";
       setPersistStatus("error", message);
       setSaveMessage(message);
     } finally {
@@ -233,13 +202,18 @@ export function ReplayPanel({
     }
   }
 
+  const compareSummary = autonomyEvaluation?.report.summary ?? null;
+  const compareNotes = autonomyEvaluation?.report.notes ?? [];
+
   return (
     <TacticalPanel
       data-tour="replay-panel"
       className={className}
-      scrollBody
+      bodyClassName={bodyClassName}
+      scrollBody={scrollBody}
       title="Replay"
-      subtitle="Playback & local save"
+      subtitle="Before / after comparison and local save"
+      headerActions={headerActions}
       panelDragHandle={panelDragHandle}
       headerRight={
         <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
@@ -270,9 +244,7 @@ export function ReplayPanel({
           data-gamepad-focus-id="replay-play"
           data-gamepad-group="replay-primary"
           data-gamepad-label={replayPlaying ? "Pause replay playback" : "Play replay playback"}
-          disabled={
-            !replayMode || activeReplayLength === 0 || busyRunId !== null || persistStatus === "saving"
-          }
+          disabled={!replayMode || activeReplayLength === 0 || busyRunId !== null || persistStatus === "saving"}
           onClick={() => setReplayPlaying(!replayPlaying)}
         >
           {replayPlaying ? "Pause" : "Play"}
@@ -282,21 +254,11 @@ export function ReplayPanel({
           variant="ghost"
           data-gamepad-focus-id="replay-save"
           data-gamepad-group="replay-primary"
-          data-gamepad-label="Save run locally"
+          data-gamepad-label="Save journey locally"
           disabled={replaySamples.length === 0 || busyRunId !== null || persistStatus === "saving"}
           onClick={saveRun}
         >
-          Save run
-        </HudButton>
-        <HudButton
-          variant="ghost"
-          data-gamepad-focus-id="replay-upload-eval"
-          data-gamepad-group="replay-primary"
-          data-gamepad-label="Run uploaded autonomy evaluation"
-          disabled={busyRunId !== null || persistStatus === "saving" || !lastAutonomyUpload}
-          onClick={runUploadEval}
-        >
-          Run upload eval
+          Save journey
         </HudButton>
       </div>
 
@@ -306,20 +268,20 @@ export function ReplayPanel({
             variant={replayDataSource === "session" ? "primary" : "ghost"}
             data-gamepad-focus-id="replay-session-source"
             data-gamepad-group="replay-source"
-            data-gamepad-label="Use session replay"
+            data-gamepad-label="Use journey replay"
             onClick={() => {
               setReplayDataSource("session");
               setReplayMode(replaySamples.length > 0);
               setReplayPlaying(false);
             }}
           >
-            Session replay
+            Journey replay
           </HudButton>
           <HudButton
             variant={replayDataSource === "autonomy" ? "primary" : "ghost"}
-            data-gamepad-focus-id="replay-autonomy-source"
+            data-gamepad-focus-id="replay-compare-source"
             data-gamepad-group="replay-source"
-            data-gamepad-label="Use autonomy replay"
+            data-gamepad-label="Use compare replay"
             disabled={!autonomyEvaluation}
             onClick={() => {
               if (!autonomyEvaluation) {
@@ -331,7 +293,7 @@ export function ReplayPanel({
               setReplayPlaying(false);
             }}
           >
-            Autonomy replay
+            Compare replay
           </HudButton>
         </div>
 
@@ -347,242 +309,152 @@ export function ReplayPanel({
                 disabled={replayDataSource !== "autonomy"}
                 onClick={() => setEvaluationView(view)}
               >
-                {view === "baseline"
-                  ? "Baseline"
-                  : view === "uploaded"
-                    ? "Uploaded"
-                    : "Overlay"}
+                {view === "baseline" ? "Baseline" : view === "uploaded" ? "Pathlight" : "Overlay"}
               </HudButton>
             ))}
           </div>
         ) : null}
       </div>
 
-      <div data-tour="replay-slider" className="px-3 py-3">
-        <div className="flex items-center gap-2">
-          <HudButton
-            variant="ghost"
-            data-gamepad-focus-id="replay-step-previous"
-            data-gamepad-group="replay-scrub"
-            data-gamepad-label="Step replay backward"
-            disabled={!replayMode || activeReplayLength === 0 || replayIndex <= 0}
-            onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))}
-          >
-            Prev
-          </HudButton>
-          <input
-            data-gamepad-focus-id="replay-slider"
-            data-gamepad-group="replay-scrub"
-            data-gamepad-label="Replay timeline scrubber"
-            type="range"
-            min={0}
-            max={Math.max(activeReplayLength - 1, 0)}
-            step={1}
-            value={replayIndex}
-            disabled={!replayMode || activeReplayLength === 0}
-            onChange={(event) => setReplayIndex(Number(event.target.value))}
-            className="tactical-range flex-1"
-          />
-          <HudButton
-            variant="ghost"
-            data-gamepad-focus-id="replay-step-next"
-            data-gamepad-group="replay-scrub"
-            data-gamepad-label="Step replay forward"
-            disabled={!replayMode || activeReplayLength === 0 || replayIndex >= Math.max(activeReplayLength - 1, 0)}
-            onClick={() => setReplayIndex(Math.min(Math.max(activeReplayLength - 1, 0), replayIndex + 1))}
-          >
-            Next
-          </HudButton>
+      <div data-tour="replay-slider" className="border-b border-[color:var(--hud-line)] px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+            Scrub samples
+          </p>
+          <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
+            {activeReplayLength === 0 ? "0 / 0" : `${Math.min(replayIndex + 1, activeReplayLength)} / ${activeReplayLength}`}
+          </span>
         </div>
-        <div className="mt-2 flex items-center justify-between font-sans text-[11px] font-medium tracking-[0.02em] text-[color:var(--hud-muted)]">
-          <span className="tabular-nums">Index {replayIndex}</span>
-          <span>{storageLabel}</span>
-        </div>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(0, activeReplayLength - 1)}
+          value={Math.min(replayIndex, Math.max(0, activeReplayLength - 1))}
+          disabled={activeReplayLength === 0}
+          onChange={(event) => {
+            setReplayPlaying(false);
+            setReplayIndex(Number(event.target.value));
+          }}
+          className="mt-3 w-full accent-[color:var(--hud-accent)]"
+        />
       </div>
 
-      <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
-        <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-          Upload status
-        </p>
-        <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-fg)]">
-          {lastAutonomyUpload?.controllerName ?? "No controller.js loaded"}
-          {lastAutonomyUpload?.missionName ? ` · ${lastAutonomyUpload.missionName}` : ""}
-        </p>
-        <p className="mt-1 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-          {autonomyEvaluation
-            ? `${autonomyEvaluation.report.summary.outcomeLabel} · avg offset ${autonomyEvaluation.report.summary.meanDistanceOffset.toFixed(3)} m`
-            : "Run the uploaded evaluation to generate overlay playback and analytics."}
-        </p>
-      </div>
-
-      {autonomyEvaluation ? (
-        <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
+      {compareSummary ? (
+        <div className="border-b border-[color:var(--hud-line)] px-3 py-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-              Debrief analytics
-            </p>
-            <span
-              className={`font-sans text-[11px] font-medium ${
-                autonomyEvaluation.report.summary.success
-                  ? "text-[color:var(--hud-ok)]"
-                  : "text-[color:var(--hud-warn)]"
-              }`}
-            >
-              {autonomyEvaluation.report.summary.outcomeLabel}
+            <div>
+              <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+                Compare summary
+              </p>
+              <p className="mt-1 font-sans text-sm font-medium text-[color:var(--hud-fg)]">
+                {compareSummary.outcomeLabel}
+              </p>
+            </div>
+            <span className="rounded-full border border-[color:var(--hud-ok)]/45 px-2 py-1 font-sans text-[10px] font-medium text-[color:var(--hud-ok)]">
+              Before vs after
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 font-sans text-[11px]">
+          <div className="mt-3 grid grid-cols-2 gap-3 font-sans text-[11px]">
             <div>
-              <p className="text-[color:var(--hud-muted)]">Time to dock</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.timeToDock === null
-                  ? "No dock"
-                  : `${autonomyEvaluation.report.summary.timeToDock.toFixed(2)} s`}
-              </p>
+              <p className="text-[color:var(--hud-muted)]">Deviation reduction</p>
+              <p className="mt-1 text-[color:var(--hud-fg)]">{compareSummary.meanDistanceOffset.toFixed(2)} m</p>
             </div>
             <div>
-              <p className="text-[color:var(--hud-muted)]">Mean distance offset</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.meanDistanceOffset.toFixed(3)} m
-              </p>
+              <p className="text-[color:var(--hud-muted)]">Confidence</p>
+              <p className="mt-1 text-[color:var(--hud-fg)]">{(compareSummary.averageConfidence * 100).toFixed(0)}%</p>
             </div>
             <div>
-              <p className="text-[color:var(--hud-muted)]">P95 lateral / vertical</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.p95LateralOffset.toFixed(3)} /{" "}
-                {autonomyEvaluation.report.summary.p95VerticalOffset.toFixed(3)} m
-              </p>
+              <p className="text-[color:var(--hud-muted)]">Reroutes</p>
+              <p className="mt-1 text-[color:var(--hud-fg)]">{compareSummary.safetyEventCount}</p>
             </div>
             <div>
-              <p className="text-[color:var(--hud-muted)]">Mean / max closure</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.meanClosureRate.toFixed(3)} /{" "}
-                {autonomyEvaluation.report.summary.maxClosureRate.toFixed(3)} m/s
-              </p>
-            </div>
-            <div>
-              <p className="text-[color:var(--hud-muted)]">Miss distance</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.missDistance.toFixed(3)} m
-              </p>
-            </div>
-            <div>
-              <p className="text-[color:var(--hud-muted)]">Envelope / confidence</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.timeInEnvelope.toFixed(2)} s /{" "}
-                {(autonomyEvaluation.report.summary.averageConfidence * 100).toFixed(0)}%
-              </p>
-            </div>
-            <div>
-              <p className="text-[color:var(--hud-muted)]">Dropout rate</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {(autonomyEvaluation.report.summary.dropoutRate * 100).toFixed(1)}%
-              </p>
-            </div>
-            <div>
-              <p className="text-[color:var(--hud-muted)]">Safety / oscillation</p>
-              <p className="text-[color:var(--hud-fg)]">
-                {autonomyEvaluation.report.summary.safetyEventCount} /{" "}
-                {autonomyEvaluation.report.summary.oscillationScore.toFixed(3)}
-              </p>
+              <p className="text-[color:var(--hud-muted)]">Correction load</p>
+              <p className="mt-1 text-[color:var(--hud-fg)]">{compareSummary.oscillationScore.toFixed(0)}</p>
             </div>
           </div>
-          {autonomyEvaluation.report.notes.length > 0 ? (
+          {compareNotes.length > 0 ? (
             <p className="mt-3 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
-              {autonomyEvaluation.report.notes.join(" · ")}
+              {compareNotes.join(" · ")}
             </p>
           ) : null}
         </div>
       ) : null}
 
-      <div className="border-t border-[color:var(--hud-line)] px-3 py-3">
+      <div className="border-b border-[color:var(--hud-line)] px-3 py-2">
         <div className="flex items-center justify-between gap-3">
           <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
-            Recent runs
+            Local storage
           </p>
-          <span className="font-sans text-[11px] text-[color:var(--hud-muted)]">
+          <span className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[10px] font-medium text-[color:var(--hud-muted)]">
+            {storageLabel}
+          </span>
+        </div>
+        <p className="mt-2 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+          {saveMessage ?? "Save strong journeys locally so you can replay them without re-running the live experience."}
+        </p>
+      </div>
+
+      <div className="space-y-2 px-3 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-sans text-[11px] font-medium tracking-[0.03em] text-[color:var(--hud-muted)]">
+            Saved journeys
+          </p>
+          <span className="font-sans text-[11px] tabular-nums text-[color:var(--hud-muted)]">
             {savedRuns.length}
           </span>
         </div>
 
         {savedRuns.length === 0 ? (
-          <p className="mt-3 font-sans text-xs leading-relaxed text-[color:var(--hud-muted)]">
-            No saved runs yet. Save a run to keep a local summary and an optional replay archive.
+          <p className="rounded-[18px] border border-dashed border-[color:var(--hud-line)] px-3 py-3 font-sans text-[11px] leading-relaxed text-[color:var(--hud-muted)]">
+            No saved journeys yet. Record a strong before/after story, then save it here for judging demos.
           </p>
         ) : (
-          <div className="mt-3 space-y-2">
-            {savedRuns.map((run) => (
-              <article
-                key={run.id}
-                className="overflow-hidden rounded-[var(--hud-radius-control)] border border-[color:var(--hud-line)] bg-black/15 px-3 py-2"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-sans text-sm font-medium text-[color:var(--hud-fg)]">
-                      {run.scenarioName}
-                    </p>
-                    <p className="mt-1 font-sans text-[11px] text-[color:var(--hud-muted)]">
-                      {timestampFormatter.format(new Date(run.completedAt))} · {formatControllerStateLabel(run.status)}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 font-sans text-[10px] font-medium tracking-[0.02em] ${
-                      run.hasReplay
-                        ? "text-[color:var(--hud-ok)]"
-                        : "text-[color:var(--hud-warn)]"
-                    }`}
-                  >
-                    {run.hasReplay ? "Replay ready" : "Summary only"}
-                  </span>
+          savedRuns.map((run) => (
+            <div key={run.id} className="rounded-[18px] border border-[color:var(--hud-line)] bg-black/15 px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-sans text-[13px] font-medium text-[color:var(--hud-fg)]">
+                    {run.scenarioName}
+                  </p>
+                  <p className="mt-1 font-sans text-[11px] text-[color:var(--hud-muted)]">
+                    {timestampFormatter.format(run.completedAt)} · {run.durationSec.toFixed(1)}s · {run.replayLength} samples
+                  </p>
                 </div>
-
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-sans text-[11px] text-[color:var(--hud-muted)]">
-                  <span>Dock {run.summary.dockScore.toFixed(2)}</span>
-                  <span>Err {run.summary.positionError.toFixed(2)} m</span>
-                  <span>Conf {(run.summary.confidence * 100).toFixed(0)}%</span>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {run.hasReplay ? (
-                    <HudButton
-                      variant="primary"
-                      data-gamepad-focus-id={`saved-run-open-${run.id}`}
-                      data-gamepad-group="saved-runs"
-                      data-gamepad-label={`Open replay for ${run.scenarioName}`}
-                      disabled={busyRunId !== null}
-                      onClick={() => openSavedReplay(run)}
-                    >
-                      {busyRunId === run.id ? "Loading..." : "Open replay"}
-                    </HudButton>
-                  ) : null}
-                  <HudButton
-                    variant="ghost"
-                    data-gamepad-focus-id={`saved-run-export-${run.id}`}
-                    data-gamepad-group="saved-runs"
-                    data-gamepad-label={`Export JSON for ${run.scenarioName}`}
-                    disabled={busyRunId !== null}
-                    onClick={() => exportSavedRun(run)}
-                  >
-                    {busyRunId === run.id ? "Working..." : "Export JSON"}
-                  </HudButton>
-                </div>
-              </article>
-            ))}
-          </div>
+                <span className="rounded-full border border-[color:var(--hud-line)] px-2 py-0.5 font-sans text-[10px] font-medium text-[color:var(--hud-muted)]">
+                  {run.status}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 font-sans text-[10px] text-[color:var(--hud-muted)]">
+                <span>Deviation {run.summary.deviationMeters.toFixed(2)} m</span>
+                <span>Access {(run.summary.accessScore * 100).toFixed(0)}%</span>
+                <span>Confidence {(run.summary.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <HudButton
+                  variant="primary"
+                  data-gamepad-focus-id={`saved-run-open-${run.id}`}
+                  data-gamepad-group="saved-runs"
+                  data-gamepad-label={`Open ${run.scenarioName} replay`}
+                  disabled={busyRunId !== null}
+                  onClick={() => void openSavedReplay(run)}
+                >
+                  Open replay
+                </HudButton>
+                <HudButton
+                  variant="ghost"
+                  data-gamepad-focus-id={`saved-run-export-${run.id}`}
+                  data-gamepad-group="saved-runs"
+                  data-gamepad-label={`Export ${run.scenarioName} replay`}
+                  disabled={busyRunId !== null}
+                  onClick={() => void exportSavedRun(run)}
+                >
+                  Export JSON
+                </HudButton>
+              </div>
+            </div>
+          ))
         )}
       </div>
-
-      {saveMessage ? (
-        <p
-          className={`border-t border-[color:var(--hud-line)] px-3 py-2 font-sans text-[11px] ${
-            persistStatus === "error"
-              ? "text-[color:var(--hud-danger-fg)]"
-              : "text-[color:var(--hud-ok)]"
-          }`}
-        >
-          {saveMessage}
-        </p>
-      ) : null}
     </TacticalPanel>
   );
 }

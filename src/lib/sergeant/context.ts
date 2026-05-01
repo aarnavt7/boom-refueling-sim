@@ -20,9 +20,11 @@ type BuildSergeantContextSnapshotInput = {
   scenarioUi: {
     aircraftCardId: string;
     cameraMode: string;
+    showDebug: boolean;
   };
   run: {
     liveRunState: SergeantContextSnapshot["run"]["liveRunState"];
+    liveRunRate: number;
     replayMode: boolean;
     replayPlaying: boolean;
     replayIndex: number;
@@ -32,6 +34,10 @@ type BuildSergeantContextSnapshotInput = {
     simTime: number;
     persistStatus: SergeantContextSnapshot["run"]["persistStatus"];
     persistMessage: string | null;
+    runControlsLocked: boolean;
+    replaySampleCount: number;
+    hasAutonomyUpload: boolean;
+    hasAutonomyEvaluation: boolean;
   };
   metrics: {
     positionError: number;
@@ -62,9 +68,11 @@ export function buildSergeantContextSnapshot({
       description: scenario.description,
       aircraftCardId: scenarioUi.aircraftCardId,
       cameraMode: scenarioUi.cameraMode,
+      showDebug: scenarioUi.showDebug,
     },
     run: {
       ...run,
+      liveRunRate: Number(run.liveRunRate.toFixed(2)),
       controllerLabel: formatControllerStateLabel(run.controllerState),
       simTime: Number(run.simTime.toFixed(1)),
     },

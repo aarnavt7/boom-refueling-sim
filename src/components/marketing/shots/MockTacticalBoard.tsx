@@ -16,9 +16,8 @@ import { useSimStore } from "@/lib/store/simStore";
 import { useUiStore } from "@/lib/store/uiStore";
 
 /**
- * Same Guidance + passive sensor + telemetry stack as `/sim` DockingHud (left column),
- * without global header / scenario / replay columns — for `/imgs` tactical section.
- * Requires `SimCanvas` (e.g. Authentic capture above) so `sensorFrame` is live.
+ * Same guidance + assistive preview + metric stack as `/sim` DockingHud (left column),
+ * without global header / scenario / replay columns — for landing-page captures.
  */
 export function MockTacticalBoard() {
   const live = useSimStore((state) => state.live);
@@ -38,8 +37,8 @@ export function MockTacticalBoard() {
   return (
     <div className="w-full max-w-3xl border border-[color:var(--hud-line)] bg-[color:var(--hud-base)] p-1 shadow-2xl">
       <TacticalPanel
-        title="Guidance"
-        subtitle={`${formatControllerStateLabel(displayed.controllerState)} · passive multispectral track`}
+        title="Trip Guidance"
+        subtitle={`${formatControllerStateLabel(displayed.controllerState)} · landmark-guided routing`}
         headerRight={
           <span className={`font-sans text-[11px] font-medium tracking-[0.02em] tabular-nums ${headerClass}`}>
             {headerLabel}
@@ -47,7 +46,7 @@ export function MockTacticalBoard() {
         }
       >
         <div className="px-3 py-2 font-sans text-[12px] leading-relaxed text-[color:var(--hud-muted)]">
-          Err{" "}
+          Drift{" "}
           <span className="tabular-nums text-[color:var(--hud-fg)]">{displayed.metrics.positionError.toFixed(2)} m</span>
           <span className="mx-2 text-[color:var(--hud-line)]">|</span>
           Conf{" "}
@@ -57,20 +56,15 @@ export function MockTacticalBoard() {
         </div>
         <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
           <p className="font-sans text-[11px] text-[color:var(--hud-muted)]">
-            Passive visible / thermal handoff · {displayed.estimate.sensorName}
+            Assistive preview · {displayed.journey?.guidancePrompt.previewLabel ?? displayed.estimate.sensorName}
           </p>
           <SensorFeedViewport viewportFrameClassName="mt-2 bg-black" />
         </div>
         <SegmentedBar value={displayed.tracker.confidence} />
         <div className="border-t border-[color:var(--hud-line)] px-3 py-2">
-          <p className="mb-2 font-sans text-[11px] text-[color:var(--hud-muted)]">Controller states (left → right)</p>
+          <p className="mb-2 font-sans text-[11px] text-[color:var(--hud-muted)]">Journey phases (left → right)</p>
           <StagePipeline sequence={CONTROLLER_SEQUENCE} active={displayed.controllerState} />
         </div>
-        {displayed.abortReason ? (
-          <p className="border-t border-[color:var(--hud-line)] px-3 py-2 font-sans text-[11px] text-[color:var(--hud-danger)]">
-            Abort: {displayed.abortReason}
-          </p>
-        ) : null}
         {persistMessage ? (
           <p className="border-t border-[color:var(--hud-line)] px-3 py-2 font-sans text-[11px] text-[color:var(--hud-accent-fg)]">
             {persistMessage}

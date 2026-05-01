@@ -229,6 +229,16 @@ export type SimMetrics = {
   activeSensorCount: number;
   trackRange: number;
   commandMagnitude: number;
+  distanceRemaining?: number;
+  correctionCount?: number;
+  rerouteCount?: number;
+  hazardExposure?: number;
+  landmarkCoverage?: number;
+  routeClarity?: number;
+  accessibilityScore?: number;
+  confidenceGain?: number;
+  travelProgress?: number;
+  offRouteEvents?: number;
 };
 
 export type UploadedAutonomyManifest = {
@@ -250,6 +260,127 @@ export type AutonomyControllerOutput = {
   positionDelta?: Vec3;
   rotationDelta?: Euler3;
   label?: string;
+};
+
+export type Landmark = {
+  id: string;
+  label: string;
+  kind: "landmark" | "checkpoint" | "service" | "elevator" | "gate" | "hazard";
+  position: Vec3;
+  clockHint: string;
+  visibilityBoost: number;
+};
+
+export type EnvironmentNode = {
+  id: string;
+  label: string;
+  kind:
+    | "origin"
+    | "junction"
+    | "checkpoint"
+    | "corridor"
+    | "elevator"
+    | "gate"
+    | "service"
+    | "destination";
+  position: Vec3;
+  landmarkId?: string | null;
+  openAreaPenalty: number;
+  signageClarity: number;
+};
+
+export type EnvironmentEdge = {
+  id: string;
+  from: string;
+  to: string;
+  length: number;
+  turnComplexity: number;
+  obstacleExposure: number;
+  crowdPenalty: number;
+  landmarkClarity: number;
+  lowVisionFriendly: boolean;
+  accessible: boolean;
+  stairs: boolean;
+  elevator: boolean;
+  openAreaPenalty: number;
+};
+
+export type HazardEvent = {
+  id: string;
+  label: string;
+  edgeId: string;
+  startsAt: number;
+  severity: "notice" | "warn" | "critical";
+  note: string;
+  rerouteNote: string;
+};
+
+export type AccessibilityProfile = {
+  id: string;
+  name: string;
+  subtitle: string;
+  assistiveMode: "blind" | "low-vision";
+  prefersLandmarks: boolean;
+  prefersLowComplexity: boolean;
+  avoidsStairs: boolean;
+  crowdTolerance: number;
+  previewLabel: string;
+};
+
+export type GuidancePrompt = {
+  title: string;
+  primary: string;
+  landmark: string;
+  safetyNote: string;
+  clockHint: string;
+  distanceLabel: string;
+  previewLabel: string;
+};
+
+export type JourneyStrategy = "baseline" | "pathlight";
+
+export type JourneyRoutePlan = {
+  strategy: JourneyStrategy;
+  nodeIds: string[];
+  edgeIds: string[];
+  points: Vec3[];
+  totalDistance: number;
+  accessibilityScore: number;
+  confusionRisk: number;
+  landmarkCoverage: number;
+  hazardExposure: number;
+};
+
+export type JourneySnapshot = {
+  strategy: JourneyStrategy;
+  currentNodeId: string;
+  nextNodeId: string | null;
+  originNodeId: string;
+  destinationNodeId: string;
+  progress: number;
+  distanceTraveled: number;
+  distanceRemaining: number;
+  correctionCount: number;
+  rerouteCount: number;
+  offRouteEvents: number;
+  activeHazards: string[];
+  routePlan: JourneyRoutePlan;
+  guidancePrompt: GuidancePrompt;
+  notes: string[];
+  assistiveMode: AccessibilityProfile["assistiveMode"];
+};
+
+export type JourneyScenario = {
+  originNodeId: string;
+  destinationNodeId: string;
+  environmentLabel: string;
+  destinationLabel: string;
+  landmarks: Landmark[];
+  nodes: EnvironmentNode[];
+  edges: EnvironmentEdge[];
+  hazards: HazardEvent[];
+  baselineSummary: string;
+  pathlightSummary: string;
 };
 
 export type AutonomyFrameInput = {
@@ -355,6 +486,7 @@ export type ScenarioPreset = {
   perception: PerceptionProfile;
   controller: ControllerProfile;
   safety: SafetyProfile;
+  journey?: JourneyScenario;
 };
 
 export type SensorFrame = {
@@ -379,6 +511,7 @@ export type LiveSimState = {
   safety: SafetyStatus;
   metrics: SimMetrics;
   abortReason: string | null;
+  journey?: JourneySnapshot;
 };
 
 export type ReplaySample = LiveSimState & {

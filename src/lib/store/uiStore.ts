@@ -6,6 +6,11 @@ import {
   DEFAULT_AIRCRAFT_CARD_ID,
   DEFAULT_CAMERA_MODE,
 } from "@/lib/sim/autonomyCatalog";
+import {
+  DEFAULT_LIVE_RUN_RATE,
+  stepLiveRunRate as getSteppedLiveRunRate,
+  type LiveRunRate,
+} from "@/lib/sim/runRate";
 import type {
   AircraftCardId,
   CameraMode,
@@ -25,6 +30,7 @@ type UiStore = {
   sensorViewportModality: SensorViewportModality;
   showDebug: boolean;
   liveRunState: LiveRunState;
+  liveRunRate: LiveRunRate;
   replayMode: boolean;
   replayDataSource: ReplayDataSource;
   evaluationView: EvaluationView;
@@ -44,6 +50,8 @@ type UiStore = {
   startLiveRun: () => void;
   pauseLiveRun: () => void;
   stopLiveRun: () => void;
+  setLiveRunRate: (rate: LiveRunRate) => void;
+  stepLiveRunRate: (direction: -1 | 1) => void;
   setReplayMode: (enabled: boolean) => void;
   setReplayDataSource: (source: ReplayDataSource) => void;
   setEvaluationView: (view: EvaluationView) => void;
@@ -62,6 +70,7 @@ export const useUiStore = create<UiStore>((set) => ({
   sensorViewportModality: "auto",
   showDebug: false,
   liveRunState: "stopped",
+  liveRunRate: DEFAULT_LIVE_RUN_RATE,
   replayMode: false,
   replayDataSource: "session",
   evaluationView: "baseline",
@@ -80,6 +89,11 @@ export const useUiStore = create<UiStore>((set) => ({
   startLiveRun: () => set({ liveRunState: "running" }),
   pauseLiveRun: () => set({ liveRunState: "paused" }),
   stopLiveRun: () => set({ liveRunState: "stopped" }),
+  setLiveRunRate: (liveRunRate) => set({ liveRunRate }),
+  stepLiveRunRate: (direction) =>
+    set((state) => ({
+      liveRunRate: getSteppedLiveRunRate(state.liveRunRate, direction),
+    })),
   setReplayMode: (replayMode) => set({ replayMode }),
   setReplayDataSource: (replayDataSource) => set({ replayDataSource }),
   setEvaluationView: (evaluationView) => set({ evaluationView }),

@@ -8,16 +8,16 @@ export function controllerTone(state: string): "ok" | "warn" | "danger" | "neutr
 }
 
 const controllerStateLabels: Record<string, string> = {
-  SEARCH: "Search",
-  ACQUIRE: "Acquire",
-  TRACK: "Track",
-  ALIGN: "Align",
-  INSERT: "Insert",
-  MATED: "Docked",
-  HOLD: "Hold",
-  DOCKED: "Docked",
-  ABORT: "Abort",
-  BREAKAWAY: "Breakaway",
+  SEARCH: "Locate",
+  ACQUIRE: "Plan",
+  TRACK: "Plan",
+  ALIGN: "Guide",
+  INSERT: "Correct",
+  MATED: "Arrive",
+  HOLD: "Reroute",
+  DOCKED: "Arrive",
+  ABORT: "Blocked",
+  BREAKAWAY: "Recover",
 };
 
 export function formatControllerStateLabel(state: string): string {
@@ -33,9 +33,9 @@ export function formatControllerStateLabel(state: string): string {
 
 export function guidanceHeaderStatusLabel(state: string): string {
   const tone = controllerTone(state);
-  if (tone === "danger") return "Fault";
-  if (tone === "ok") return "Captured";
-  if (tone === "warn") return "Hot";
+  if (tone === "danger") return "Risk";
+  if (tone === "ok") return "Arrived";
+  if (tone === "warn") return "Rerouting";
   return "Nominal";
 }
 
